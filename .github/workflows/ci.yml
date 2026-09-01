@@ -1,0 +1,39 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: sudo apt-get update && sudo apt-get install -y tmux && tmux -V
+      - name: Validate the config against a live server
+        run: |
+          set -eux
+          tmux -L ci -f /dev/null new-session -d -x 200 -y 50
+          trap 'tmux -L ci kill-server 2>/dev/null' EXIT
+          tmux -L ci source-file ./omp-tmux.conf
+          tab() { tmux -L ci display-message -p '#{E:window-status-format}' | sed 's/#\[[^]]*\]//g'; }
+          strip() { tmux -L ci display-message -p '#{E:status-right}' | sed 's/#\[[^]]*\]//g'; }
+          tmux -L ci select-pane -T 'π ⠋ Compile the very long parser label here'
+          tab | grep -qF '⠋ 0:Compile the very lon…'
+          strip | grep -qF '0●'
+          tmux -L ci select-pane -T 'π ! Pick a name'
+          tab | grep -qF '? 0:Pick a name'
+          strip | grep -qF '0?'
+          tmux -L ci select-pane -T 'π > Waiting around'
+          strip | grep -qF '0·'
+          tmux -L ci set-option -w @omp_priority high
+          tab | grep -qF '^'
+          tmux -L ci select-pane -T 'bash'
+          tab | grep -qF '0:bash'
+          test "$(tmux -L ci show-options -gv monitor-bell)" = on
+          test "$(tmux -L ci show-options -gv visual-bell)" = on
+          test "$(tmux -L ci show-options -gv set-titles)" = on
+          test "$(tmux -L ci show-options -gv mouse)" = off
+          test "$(tmux -L ci show-options -gv status-right-length)" = 80
