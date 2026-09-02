@@ -19,6 +19,7 @@ jobs:
           trap 'tmux -L ci kill-server 2>/dev/null' EXIT
           tmux -L ci source-file ./omp-tmux.conf
           tab() { tmux -L ci display-message -p '#{E:window-status-format}' | sed 's/#\[[^]]*\]//g'; }
+          tabat() { tmux -L ci display-message -p -t "$1" '#{E:window-status-format}' | sed 's/#\[[^]]*\]//g'; }
           strip() { tmux -L ci display-message -p '#{E:status-right}' | sed 's/#\[[^]]*\]//g'; }
           tmux -L ci select-pane -T 'π ⠋ Compile the very long parser label here'
           tab | grep -qF '⠋ 0:Compile the very lon…'
@@ -30,6 +31,33 @@ jobs:
           strip | grep -qF '0·'
           tmux -L ci set-option -w @omp_priority high
           tab | grep -qF '^'
+          tmux -L ci set-option -wu @omp_priority
+          # A label carrying the brand glyph itself must not confuse the strip or the state match.
+          tmux -L ci select-pane -T 'π ⠋ compute π value'
+          tab | grep -qF '⠋ 0:compute π value'
+          # Priority and bell together. A bell only flags a window that is not the current one,
+          # so the assertion needs a second window to switch away to.
+          tmux -L ci select-pane -T 'π > Idle with a bell'
+          tmux -L ci set-option -w @omp_priority high
+          tmux -L ci new-window -t :9
+          # Straight to the pane device rather than through send-keys, which needs the shell to be
+          # ready to run a command; then poll, so a slow runner cannot turn this into a flake.
+          printf '\a' > "$(tmux -L ci display-message -p -t :0 '#{pane_tty}')"
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            if [ "$(tmux -L ci display-message -p -t :0 '#{window_bell_flag}')" = 1 ]; then break; fi
+            sleep 0.5
+          done
+          test "$(tmux -L ci display-message -p -t :0 '#{window_bell_flag}')" = 1
+          tabat :0 | grep -qF '^'
+          tabat :0 | grep -qF '+'
+          tmux -L ci kill-window -t :9
+          tmux -L ci set-option -w -t :0 -u @omp_priority
+          # Exactly 20 characters is the last width that survives whole; 21 loses its tail.
+          tmux -L ci select-pane -T 'π > 12345678901234567890'
+          tab | grep -qF '0:12345678901234567890'
+          if tab | grep -qF '…'; then echo 'a 20-character label must not be shortened' >&2; exit 1; fi
+          tmux -L ci select-pane -T 'π > 123456789012345678901'
+          tab | grep -qF '0:12345678901234567890…'
           tmux -L ci select-pane -T 'bash'
           tab | grep -qF '0:bash'
           test "$(tmux -L ci show-options -gv monitor-bell)" = on
