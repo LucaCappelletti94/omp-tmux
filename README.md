@@ -1,6 +1,6 @@
 # omp-tmux
 
-[![CI](https://github.com/LucaCappelletti94/omp-tmux/actions/workflows/ci.yml/badge.svg)](https://github.com/LucaCappelletti94/omp-tmux/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/LucaCappelletti94/omp-tmux/actions/workflows/ci.yml/badge.svg)](https://github.com/LucaCappelletti94/omp-tmux/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Codacy](https://app.codacy.com/project/badge/Grade/8fe3849717f94c82ad2f8236f7bd3e91)](https://app.codacy.com/gh/LucaCappelletti94/omp-tmux/dashboard)
 
 Live tmux tabs for [Oh My Pi](https://github.com/can1357/oh-my-pi) agents.
 
