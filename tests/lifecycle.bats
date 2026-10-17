@@ -149,13 +149,27 @@ status_unset() { [ -z "$(inner show-options -q -v -t "${1:-proof}" status)" ]; }
 	[ "$(messages_with 'omp-tmux:')" -eq 0 ]
 }
 
+@test "the configuration loads without errors" {
+	start_session 0
+	run inner source-file "$root/omp-tmux.conf"
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
+}
+
 @test "reloading the configuration keeps one copy of each hook and leaves other hooks alone" {
 	start_session 0 1 2 3 4
 	inner set-hook -g 'client-resized[5]' 'display-message mine'
 	inner source-file "$root/omp-tmux.conf"
 	inner source-file "$root/omp-tmux.conf"
 	hooks=$(inner show-hooks -g)
-	for hook in client-attached client-detached client-resized client-session-changed window-linked window-unlinked; do
+	hooks_expected='client-attached client-detached client-resized client-session-changed window-linked window-unlinked'
+	# tmux before 3.3 has no window hooks.
+	case $(tmux -V) in 'tmux '[0-2].* | 'tmux 3.'[0-2] | 'tmux 3.'[0-2][!0-9]*)
+		hooks_expected='client-attached client-detached client-resized client-session-changed'
+		[ "$(echo "$hooks" | grep -c '^window-')" -eq 0 ]
+		;;
+	esac
+	for hook in $hooks_expected; do
 		[ "$(echo "$hooks" | grep "^$hook\[100\]" | grep -c '@omp_layout')" -eq 1 ]
 		[ "$(echo "$hooks" | grep -c "^$hook\[")" -eq "$([ "$hook" = client-resized ] && echo 2 || echo 1)" ]
 	done
