@@ -100,9 +100,15 @@ height() { inner show-options -v -t "${1:-proof}" status; }
 row() { outer capture-pane -N -p -t "$1" | tail -n "$2" | sed -n "$(($3 + 1))p"; }
 styled_row() { outer capture-pane -e -p -t "$1" | tail -n "$2" | sed -n "$(($3 + 1))p"; }
 
-row_contains() { case $(row "$1" "$2" "$3") in *"$4"*) return 0 ;; esac; return 1; }
+row_contains() {
+	case $(row "$1" "$2" "$3") in *"$4"*) return 0 ;; esac
+	return 1
+}
 
-cell() { r=$(row "$1" "$2" "$3"); printf '%s' "${r:$(($4 * $5)):$5}"; }
+cell() {
+	r=$(row "$1" "$2" "$3")
+	printf '%s' "${r:$(($4 * $5)):$5}"
+}
 
 title() {
 	printf '\033]2;%s\007' "$2" >"$(inner display-message -p -t "proof:$1" '#{pane_tty}')"

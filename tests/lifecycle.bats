@@ -5,7 +5,10 @@
 load helpers
 
 # slice CLIENT ROWS K START LEN prints LEN cells of status row K from START.
-slice() { r=$(row "$1" "$2" "$3"); printf '%s' "${r:$4:$5}"; }
+slice() {
+	r=$(row "$1" "$2" "$3")
+	printf '%s' "${r:$4:$5}"
+}
 
 lacks() { ! row_contains "$@"; }
 
