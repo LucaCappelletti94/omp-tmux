@@ -136,7 +136,7 @@ status_unset() { [ -z "$(inner show-options -q -v -t "${1:-proof}" status)" ]; }
 	refresh
 	kill -0 "$bystander"
 	kill "$bystander"
-	[ "$(inner list-sessions | wc -l)" -eq 1 ]
+	[ "$(inner list-sessions | grep -c '')" -eq 1 ]
 }
 
 @test "a refresh racing the removal of its session exits quietly" {

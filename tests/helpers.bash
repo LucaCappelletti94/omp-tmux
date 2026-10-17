@@ -73,7 +73,8 @@ start_session() {
 	socket=$(inner display-message -p '#{socket_path}')
 }
 
-clients() { inner list-clients | wc -l; }
+# BSD wc pads its count with spaces, so lines are counted with grep.
+clients() { inner list-clients | grep -c '' || true; }
 
 # attach NAME WIDTH HEIGHT [SESSION] attaches one more client of that size.
 attach() {
