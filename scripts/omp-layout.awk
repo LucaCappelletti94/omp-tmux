@@ -96,14 +96,17 @@ function plan_width(w,    cols, cell, field, budget, core, cap, pages, p, r, s, 
 
 stage == "plan" && $1 == "window" { index_of[window_count++] = $2; next }
 stage == "plan" && $1 == "client" && $4 == 0 {
-	client_heights[client_count++] = $3
-	if (!($2 in seen)) { seen[$2] = 1; widths[width_count++] = $2 }
+	client_heights[client_count++] = $3 + 0
+	if (!($2 in seen)) { seen[$2] = 1; widths[width_count++] = $2 + 0 }
 	next
 }
 
 function plan_end(    i, w, allowance, target, minimum, needed) {
 	if (!positive_int(max_rows)) fail("@omp_max_rows must be a positive integer, got '" max_rows "'")
 	if (!positive_int(label_width)) fail("@omp_label_width must be a positive integer, got '" label_width "'")
+	# BusyBox awk compares -v values and fields as strings, so numbers are coerced with + 0.
+	max_rows += 0
+	label_width += 0
 	if (window_count == 0) fail("no windows to lay out")
 
 	index_digits = digits(index_of[window_count - 1])
@@ -138,12 +141,12 @@ function plan_end(    i, w, allowance, target, minimum, needed) {
 
 # Cell and summary pieces live in the @omp_cell_* and @omp_sum_* options of omp-tmux.conf.
 
-stage == "render" && $1 == "windows" { index_digits = $3 }
-stage == "render" && $1 == "height" { height = $2 }
+stage == "render" && $1 == "windows" { index_digits = $3 + 0 }
+stage == "render" && $1 == "height" { height = $2 + 0 }
 stage == "render" && $1 == "native" { native = 1 }
 stage == "render" && $1 == "width" {
 	order[width_count++] = $2
-	mode[$2] = $3; budget[$2] = $6; field[$2] = $7; pages[$2] = $8; fields[$2] = $9
+	mode[$2] = $3; budget[$2] = $6 + 0; field[$2] = $7 + 0; pages[$2] = $8 + 0; fields[$2] = $9
 }
 stage == "render" && $1 == "row" {
 	members[$2, $3, $4] = $5 " " $6
