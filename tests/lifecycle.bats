@@ -126,6 +126,16 @@ status_unset() { [ -z "$(inner show-options -q -v -t "${1:-proof}" status)" ]; }
 	row_contains a 3 1 '4:w4'
 }
 
+@test "a refresh leaves processes it did not start alone" {
+	start_session 0 1 2 3 4
+	sleep 4711 3>&- &
+	bystander=$!
+	refresh
+	kill -0 "$bystander"
+	kill "$bystander"
+	[ "$(inner list-sessions | wc -l)" -eq 1 ]
+}
+
 @test "a refresh racing the removal of its session exits quietly" {
 	start_session 0 1 2 3 4
 	new_session keepalive 0

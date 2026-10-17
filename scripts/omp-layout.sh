@@ -76,7 +76,8 @@ refresh() {
 	watchdog=$!
 	status=0
 	wait "$worker" || status=$?
-	pkill -TERM -x sleep -P "$watchdog" 2>/dev/null || true
+	# BSD pkill stops reading options at the pattern, so -P must come first.
+	pkill -TERM -P "$watchdog" -x sleep 2>/dev/null || true
 	kill -TERM "$watchdog" 2>/dev/null || true
 	wait "$watchdog" 2>/dev/null || true
 	return "$status"
