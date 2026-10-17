@@ -27,3 +27,31 @@ jobs:
           test "$(tmux -L ci show-options -gv visual-bell)" = on
           test "$(tmux -L ci show-options -gv set-titles)" = on
           test "$(tmux -L ci show-options -gv mouse)" = off
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SHFMT: v3.14.1
+      SHFMT_SHA256: 76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf
+      ACTIONLINT: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install pinned shfmt and actionlint
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/bin"
+          cd "$RUNNER_TEMP"
+          curl -fsSLo bin/shfmt "https://github.com/mvdan/sh/releases/download/$SHFMT/shfmt_${SHFMT}_linux_amd64"
+          echo "$SHFMT_SHA256  bin/shfmt" | sha256sum -c -
+          curl -fsSLo actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT/actionlint_${ACTIONLINT}_linux_amd64.tar.gz"
+          echo "$ACTIONLINT_SHA256  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz -C bin actionlint
+          chmod +x bin/shfmt
+          echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+      - name: ShellCheck
+        run: shellcheck scripts/omp-layout.sh && shellcheck -s bash tests/*.bats tests/helpers.bash
+      - name: shfmt
+        run: shfmt -d scripts/omp-layout.sh tests/*.bats tests/helpers.bash
+      - name: actionlint
+        run: actionlint
