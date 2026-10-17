@@ -3,18 +3,43 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+  # Weekly, so a new tmux release or a change on tmux master shows up before users hit it.
+  schedule:
+    - cron: '17 5 * * 1'
 permissions:
   contents: read
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    name: tmux ${{ matrix.tmux }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    # tmux master is a warning, never a failure of the change under test.
+    continue-on-error: ${{ matrix.tmux == 'master' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, tmux: apt, locale: C.UTF-8 }
+          - { os: ubuntu-24.04, tmux: apt, locale: C.UTF-8 }
+          - { os: ubuntu-24.04, tmux: 3.3a, locale: C.UTF-8 }
+          - { os: ubuntu-24.04, tmux: 3.5a, locale: C.UTF-8 }
+          - { os: ubuntu-24.04, tmux: 3.6b, locale: C.UTF-8 }
+          - { os: ubuntu-24.04, tmux: 3.7c, locale: C.UTF-8 }
+          - { os: ubuntu-24.04, tmux: '3.8', locale: C.UTF-8 }
+          - { os: ubuntu-24.04, tmux: master, locale: C.UTF-8 }
+          - { os: macos-latest, tmux: brew, locale: en_US.UTF-8 }
     env:
-      LANG: C.UTF-8
-      LC_ALL: C.UTF-8
+      LANG: ${{ matrix.locale }}
+      LC_ALL: ${{ matrix.locale }}
+      TMUX_VERSION: ${{ matrix.tmux }}
+      BATS_VERSION: v1.11.1
+      BATS_COMMIT: b640ec3cf2c7c9cfc9e6351479261186f76eeec8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: sudo apt-get update && sudo apt-get install -y tmux bats && tmux -V && bats --version
+      - name: Install tmux and bats-core
+        run: sh .github/ci-setup.sh
       - name: Run the layout and status grid tests
         run: bats tests/
       - name: Validate the remaining config options against a live server
@@ -50,8 +75,8 @@ jobs:
           chmod +x bin/shfmt
           echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
       - name: ShellCheck
-        run: shellcheck scripts/omp-layout.sh && shellcheck -s bash tests/*.bats tests/helpers.bash
+        run: shellcheck scripts/omp-layout.sh .github/ci-setup.sh && shellcheck -s bash tests/*.bats tests/helpers.bash
       - name: shfmt
-        run: shfmt -d scripts/omp-layout.sh tests/*.bats tests/helpers.bash
+        run: shfmt -d scripts/omp-layout.sh .github/ci-setup.sh tests/*.bats tests/helpers.bash
       - name: actionlint
         run: actionlint

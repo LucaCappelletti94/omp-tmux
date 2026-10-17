@@ -109,14 +109,14 @@ load helpers
 	refresh
 	eventually is 4 height
 	eventually row_contains b 4 3 'page 4/4'
-	row_contains a 4 3 'page 2/2'
+	eventually row_contains a 4 3 'page 2/2'
 	row_contains b 4 3 '?1 '
 	row_contains b 4 0 '126:'
 	row_contains b 4 2 '132:'
 	inner select-window -t proof:101
 	eventually row_contains b 4 3 'page 1/4'
 	row_contains b 4 0 '101:'
-	row_contains a 4 3 'page 1/2'
+	eventually row_contains a 4 3 'page 1/2'
 }
 
 @test "prefix A r applies changed layout settings" {
