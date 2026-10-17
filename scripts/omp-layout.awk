@@ -101,7 +101,7 @@ stage == "plan" && $1 == "client" && $4 == 0 {
 	next
 }
 
-function plan_end(    i, w, allowance, target, minimum, needed) {
+function plan_end(    i, w, allowance, target, minimum, needed, line) {
 	if (!positive_int(max_rows)) fail("@omp_max_rows must be a positive integer, got '" max_rows "'")
 	if (!positive_int(label_width)) fail("@omp_label_width must be a positive integer, got '" label_width "'")
 	# BusyBox awk compares -v values and fields as strings, so numbers are coerced with + 0.
@@ -112,6 +112,9 @@ function plan_end(    i, w, allowance, target, minimum, needed) {
 	index_digits = digits(index_of[window_count - 1])
 	count_digits = digits(window_count)
 	print "windows", window_count, index_digits, count_digits
+	line = "indices"
+	for (i = 0; i < window_count; i++) line = line " " index_of[i]
+	print line
 
 	if (client_count == 0) {
 		print "height 1"
@@ -142,6 +145,7 @@ function plan_end(    i, w, allowance, target, minimum, needed) {
 # Cell and summary pieces live in the @omp_cell_* and @omp_sum_* options of omp-tmux.conf.
 
 stage == "render" && $1 == "windows" { index_digits = $3 + 0 }
+stage == "render" && $1 == "indices" { for (i = 2; i <= NF; i++) signature = signature $i " " }
 stage == "render" && $1 == "height" { height = $2 + 0 }
 stage == "render" && $1 == "native" { native = 1 }
 stage == "render" && $1 == "width" {
@@ -233,10 +237,13 @@ function render_end(    i, k, w, out, tail) {
 				out = out "#{?#{==:#{client_width}," w "}," row_for(w, i) ","
 				tail = tail "}"
 			}
-			print "set-option -t '" session "' status-format[" i "] '" out (i == 0 ? "#{E:@omp_native_row}" : "") tail "'"
+			# A layout built for other window indices is stale, so row 0 falls back to the self-healing native row.
+			out = out (i == 0 ? "#{E:@omp_native_row}" : "") tail
+			print "set-option -t '" session "' status-format[" i "] '#{?#{==:#{W:#{window_index} }," signature "}," out "," (i == 0 ? "#{E:@omp_native_row}" : "") "}'"
 		}
 		print "set-option -t '" session "' status " (height == 1 ? "on" : height)
 	}
+	print "set-option -u -t '" session "' @omp_layout_error"
 	print "}"
 }
 

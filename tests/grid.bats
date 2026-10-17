@@ -1,92 +1,8 @@
 #!/usr/bin/env bats
-# An outer tmux server hosts each client, so its capture-pane sees the real status rows.
+# The status grid as drawn on real attached clients.
+# shellcheck disable=SC2154 # root, helper, socket and session_id come from helpers.bash
 
-setup() {
-	export LC_ALL=C.UTF-8
-	root="$BATS_TEST_DIRNAME/.."
-	helper="$root/scripts/omp-layout.sh"
-	inner_socket="omp-in-$$-$BATS_TEST_NUMBER"
-	outer_socket="omp-out-$$-$BATS_TEST_NUMBER"
-	printf 'set -g status off\nset -g remain-on-exit on\n' >"$BATS_TEST_TMPDIR/outer.conf"
-}
-
-teardown() {
-	tmux -L "$outer_socket" kill-server 2>/dev/null || true
-	tmux -L "$inner_socket" kill-server 2>/dev/null || true
-}
-
-inner() { tmux -L "$inner_socket" "$@"; }
-outer() { tmux -L "$outer_socket" "$@"; }
-
-# eventually retries a command for up to 5 seconds, so $(...) checks go through is to rerun.
-eventually() {
-	tries=0
-	until "$@"; do
-		tries=$((tries + 1))
-		[ "$tries" -lt 50 ] || return 1
-		sleep 0.1
-	done
-}
-
-# is WANT CMD... succeeds when CMD prints exactly WANT.
-is() {
-	want=$1
-	shift
-	[ "$("$@")" = "$want" ]
-}
-
-start_session() {
-	inner -f /dev/null new-session -d -s proof -n w0 -x 80 -y 24 'sleep 600'
-	keep_zero=0
-	for i in "$@"; do
-		if [ "$i" -eq 0 ]; then keep_zero=1; else inner new-window -d -n "w$i" -t "proof:$i" 'sleep 600'; fi
-	done
-	[ "$keep_zero" -eq 1 ] || inner kill-window -t proof:0
-	inner source-file "$root/omp-tmux.conf"
-	session_id=$(inner display-message -p -t proof '#{session_id}')
-	socket=$(inner display-message -p '#{socket_path}')
-}
-
-clients() { inner list-clients | wc -l; }
-
-attach() {
-	expected=$(($(clients) + 1))
-	if outer has-session 2>/dev/null; then
-		outer new-session -d -s "$1" -x "$2" -y "$3" "env -u TMUX tmux -L $inner_socket attach -t proof"
-	else
-		outer -f "$BATS_TEST_TMPDIR/outer.conf" new-session -d -s "$1" -x "$2" -y "$3" \
-			"env -u TMUX tmux -L $inner_socket attach -t proof"
-	fi
-	eventually is "$expected" clients || {
-		echo "client $1 did not attach: expected $expected clients, list-clients shows:" >&2
-		inner list-clients -F '#{client_name} #{client_width}x#{client_height} control=#{client_control_mode} session=#{session_name}' >&2
-		echo "its pane shows:" >&2
-		outer capture-pane -p -t "$1" | grep -v '^$' >&2
-		return 1
-	}
-}
-
-refresh() { "$helper" refresh "$socket" "$session_id"; }
-
-height() { inner show-options -v -t proof status; }
-
-# row CLIENT ROWS K prints status row K of a ROWS-high bar.
-row() { outer capture-pane -N -p -t "$1" | tail -n "$2" | sed -n "$(($3 + 1))p"; }
-styled_row() { outer capture-pane -e -p -t "$1" | tail -n "$2" | sed -n "$(($3 + 1))p"; }
-
-row_contains() { case $(row "$1" "$2" "$3") in *"$4"*) return 0 ;; esac; return 1; }
-
-cell() { r=$(row "$1" "$2" "$3"); printf '%s' "${r:$(($4 * $5)):$5}"; }
-
-title() {
-	printf '\033]2;%s\007' "$2" >"$(inner display-message -p -t "proof:$1" '#{pane_tty}')"
-	eventually is "$2" inner display-message -p -t "proof:$1" '#{pane_title}'
-}
-
-ring() {
-	printf '\a' >"$(inner display-message -p -t "proof:$1" '#{pane_tty}')"
-	eventually is 1 inner display-message -p -t "proof:$1" '#{window_bell_flag}'
-}
+load helpers
 
 @test "a fleet wider than the terminal wraps into rows above a summary" {
 	start_session 0 1 2 3 4
@@ -203,31 +119,17 @@ ring() {
 	row_contains a 4 3 'page 1/2'
 }
 
-@test "a width without a computed layout falls back to the native row" {
+@test "prefix A r applies changed layout settings" {
 	start_session 0 1 2 3 4
 	attach a 80 24
 	refresh
-	eventually row_contains a 3 1 '4:'
-	outer resize-window -t a -x 100 -y 24
-	eventually row_contains a 3 0 '?0 +0 ^0'
-	native=$(row a 3 0)
-	case $native in *'0:'*'1:'*'2:'*'3:'*'4:'*) ;; *) false ;; esac
-	[ -z "$(row a 3 1 | tr -d ' ')" ]
-}
-
-@test "prefix A r lays the bar out again for the current width" {
-	start_session 0 1 2 3 4
-	attach a 80 24
-	refresh
-	eventually row_contains a 3 1 '4:'
-	outer resize-window -t a -x 100 -y 24
-	eventually row_contains a 3 0 '?0 +0 ^0'
+	eventually is 3 height
+	inner set -g @omp_max_rows 2
 	outer send-keys -t a C-b A
 	eventually is omp-agent inner display-message -p '#{client_key_table}'
 	outer send-keys -t a r
-	eventually row_contains a 3 2 '5 windows'
-	first=$(row a 3 0)
-	[ "${first:28:2}" = '1:' ]
+	eventually is 2 height
+	eventually row_contains a 2 1 'page 1/2'
 }
 
 @test "sourcing the configuration lays out clients already attached" {
@@ -269,21 +171,27 @@ ring() {
 	eventually is 3 height
 	inner set -g @omp_max_rows x
 	refresh || true
-	eventually eval 'inner show-messages | grep -q "omp-tmux: @omp_max_rows must be a positive integer"'
+	eventually is 1 messages_with 'omp-tmux: @omp_max_rows must be a positive integer'
 	[ "$(height)" = 3 ]
 }
 
 @test "a superseded request never publishes" {
 	start_session 0 1 2 3 4
 	attach a 80 24
+	refresh
+	eventually is 3 height
+	inner set -g @omp_max_rows 2
 	inner set-option -t proof @omp_layout_request newer
 	"$helper" publish "$socket" "$session_id" older
-	[ -z "$(inner show-options -q -v -t proof status)" ]
+	[ "$(height)" = 3 ]
 }
 
 @test "a refresh exceeding two seconds is stopped and leaves the layout" {
 	start_session 0 1 2 3 4
 	attach a 80 24
+	refresh
+	eventually is 3 height
+	inner set -g @omp_max_rows 2
 	real_tmux=$(command -v tmux)
 	mkdir "$BATS_TEST_TMPDIR/shim"
 	cat >"$BATS_TEST_TMPDIR/shim/tmux" <<-EOF
@@ -297,7 +205,7 @@ ring() {
 	start=$(date +%s)
 	PATH="$BATS_TEST_TMPDIR/shim:$PATH" "$helper" refresh "$socket" "$session_id" || true
 	[ $(($(date +%s) - start)) -le 4 ]
-	[ -z "$(inner show-options -q -v -t proof status)" ]
-	eventually eval 'inner show-messages | grep -q "omp-tmux: layout refresh exceeded 2 seconds"'
-	eventually eval '! pgrep -f "sleep 47" >/dev/null'
+	[ "$(height)" = 3 ]
+	eventually is 1 messages_with 'omp-tmux: layout refresh exceeded 2 seconds'
+	eventually no_process 'sleep 47'
 }
