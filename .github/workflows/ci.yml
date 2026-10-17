@@ -52,6 +52,44 @@ jobs:
           test "$(tmux -L ci show-options -gv visual-bell)" = on
           test "$(tmux -L ci show-options -gv set-titles)" = on
           test "$(tmux -L ci show-options -gv mouse)" = off
+  alpine:
+    name: tmux on Alpine with BusyBox sh, awk and pkill
+    runs-on: ubuntu-24.04
+    container: alpine:3.24
+    timeout-minutes: 15
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      TMUX_VERSION: apk
+      BATS_VERSION: v1.11.1
+      BATS_COMMIT: b640ec3cf2c7c9cfc9e6351479261186f76eeec8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install tmux and bats-core
+        run: sh .github/ci-setup.sh
+      - name: Run the layout and status grid tests
+        run: bats tests/
+  awk:
+    name: layout under ${{ matrix.awk }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        awk: [mawk, gawk --posix, original-awk, busybox awk]
+    env:
+      AWK: ${{ matrix.awk }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq bats mawk gawk original-awk busybox
+      - name: Put this awk first on PATH
+        run: |
+          mkdir -p "$RUNNER_TEMP/awk"
+          printf '#!/bin/sh\nexec %s "$@"\n' "$AWK" >"$RUNNER_TEMP/awk/awk"
+          chmod +x "$RUNNER_TEMP/awk/awk"
+          echo "$RUNNER_TEMP/awk" >>"$GITHUB_PATH"
+      - name: Run the layout tests, which need no tmux
+        run: bats tests/layout.bats
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 5
