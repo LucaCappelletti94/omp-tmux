@@ -1,11 +1,14 @@
 #!/bin/sh
-# Installs tmux $TMUX_VERSION (apt, brew, master or a release tag) and pinned bats-core.
+# Installs tmux $TMUX_VERSION (apt, apk, brew, master or a release tag) and pinned bats-core.
 set -eu
 
 case $TMUX_VERSION in
 apt)
 	sudo apt-get update -qq
 	sudo apt-get install -y -qq tmux
+	;;
+apk)
+	apk add -q tmux bash git ncurses-terminfo-base
 	;;
 brew)
 	brew install tmux
