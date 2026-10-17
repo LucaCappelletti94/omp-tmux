@@ -9,6 +9,10 @@ on:
     - cron: '17 5 * * 1'
 permissions:
   contents: read
+# A newer push to a branch cancels its older run, while every run on main finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   validate:
