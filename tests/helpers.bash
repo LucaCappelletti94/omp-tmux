@@ -2,7 +2,8 @@
 # client, so its capture-pane sees the real status rows.
 
 setup() {
-	export LC_ALL=C.UTF-8
+	# macOS has no C.UTF-8, so CI passes its own UTF-8 locale.
+	export LC_ALL="${LC_ALL:-C.UTF-8}"
 	root="$BATS_TEST_DIRNAME/.."
 	helper="$root/scripts/omp-layout.sh"
 	inner_socket="omp-in-$$-$BATS_TEST_NUMBER"
@@ -72,7 +73,8 @@ start_session() {
 	socket=$(inner display-message -p '#{socket_path}')
 }
 
-clients() { inner list-clients | wc -l; }
+# BSD wc pads its count with spaces, so lines are counted with grep.
+clients() { inner list-clients | grep -c '' || true; }
 
 # attach NAME WIDTH HEIGHT [SESSION] attaches one more client of that size.
 attach() {
