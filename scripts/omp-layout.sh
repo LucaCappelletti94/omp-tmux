@@ -19,7 +19,16 @@ usage() {
 
 tm() { tmux -S "$socket" "$@"; }
 
-report() { tm display-message -t "$session" "$1" 2>/dev/null || true; }
+# The stale guard retries every second, so each distinct failure shows once. The text goes in
+# through argv, and if-shell checks and records its checksum in one atomic command.
+report() {
+	key="@omp_layout_message_$$"
+	sum=$(printf '%s' "$1" | cksum | cut -d ' ' -f 1)
+	tm set-option -t "$session" "$key" "$1" 2>/dev/null || return 0
+	tm if-shell -F -t "$session" "#{!=:#{@omp_layout_error},$sum}" \
+		"set-option -t '$session' @omp_layout_error $sum ; display-message -t '$session' '#{$key}'" 2>/dev/null || true
+	tm set-option -u -t "$session" "$key" 2>/dev/null || true
+}
 
 # Only the request id still stored on the session may publish, so a newer or expired refresh wins.
 publish() {
@@ -48,7 +57,7 @@ publish() {
 	fi
 }
 
-# The worker gets two seconds; on expiry its request is retired before it and its children are killed.
+# The worker gets two seconds, then its request is retired and it and its children are killed.
 refresh() {
 	request="$$.$(date +%s)"
 	tm set-option -t "$session" @omp_layout_request "$request" 2>/dev/null || return 0
@@ -56,6 +65,8 @@ refresh() {
 	worker=$!
 	(
 		sleep 2
+		# Once fired, the watchdog must outlive the cleanup below to show its message.
+		trap '' TERM
 		kill -0 "$worker" 2>/dev/null || exit 0
 		tm set-option -t "$session" @omp_layout_request "expired.$request" 2>/dev/null || true
 		pkill -TERM -P "$worker" 2>/dev/null || true
@@ -65,7 +76,8 @@ refresh() {
 	watchdog=$!
 	status=0
 	wait "$worker" || status=$?
-	pkill -TERM -P "$watchdog" 2>/dev/null || true
+	pkill -TERM -x sleep -P "$watchdog" 2>/dev/null || true
+	kill -TERM "$watchdog" 2>/dev/null || true
 	wait "$watchdog" 2>/dev/null || true
 	return "$status"
 }
@@ -87,6 +99,7 @@ publish)
 refresh)
 	[ $# -eq 3 ] || usage
 	socket=$2 session=$3
+	[ -n "$session" ] || exit 0
 	refresh
 	;;
 refresh-all)
