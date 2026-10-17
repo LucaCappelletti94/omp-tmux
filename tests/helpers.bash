@@ -42,8 +42,8 @@ differs() {
 	[ "$("$@")" != "$old" ]
 }
 
-# The message log also records client commands, so only displayed messages are counted.
-messages_with() { inner show-messages | grep -v ' command: ' | grep -c "$1" || true; }
+# The message log also records commands and key bindings, so only displayed messages are counted.
+messages_with() { inner show-messages | grep -F ' message: ' | grep -c "$1" || true; }
 
 no_process() { ! pgrep -f "$1" >/dev/null; }
 
