@@ -16,7 +16,7 @@ function field_width(name, pages) {
 	if (name == "waiting" || name == "bells" || name == "priority") return 2 + count_digits
 	if (name == "page") return 7 + 2 * digits(pages)
 	if (name == "total") return 9 + count_digits
-	if (name == "hints") return 8
+	if (name == "hints") return 7 + length(hint_key)
 	if (name == "session") return 15
 	if (name == "zoom") return 2
 	if (name == "clock") return 6
@@ -95,6 +95,7 @@ function plan_width(w,    cols, cell, field, budget, core, cap, pages, p, r, s, 
 }
 
 stage == "plan" && $1 == "window" { index_of[window_count++] = $2; next }
+stage == "plan" && $1 == "key" { hint_key = $2; next }
 stage == "plan" && $1 == "client" && $4 == 0 {
 	client_heights[client_count++] = $3 + 0
 	if (!($2 in seen)) { seen[$2] = 1; widths[width_count++] = $2 + 0 }
@@ -102,6 +103,7 @@ stage == "plan" && $1 == "client" && $4 == 0 {
 }
 
 function plan_end(    i, w, allowance, target, minimum, needed, line) {
+	if (hint_key == "") hint_key = "A"
 	if (!positive_int(max_rows)) fail("@omp_max_rows must be a positive integer, got '" max_rows "'")
 	if (!positive_int(label_width)) fail("@omp_label_width must be a positive integer, got '" label_width "'")
 	# BusyBox awk compares -v values and fields as strings, so numbers are coerced with + 0.
@@ -224,10 +226,13 @@ function row_for(w, i,    p, content) {
 	return by_page(w, content) "#[align=right]" summary(w)
 }
 
-function render_end(    i, k, w, out, tail) {
+# bar is "shown", "hidden" when a global status off hides it, or "off" when the session's own
+# status is off. A hidden bar keeps its formats current but never gets a height.
+function render_end(    i, k, w, out, tail, keep) {
+	keep = bar == "off"
 	print "if-shell -F -t '" session "' '#{==:#{@omp_layout_request}," request "}' {"
 	if (native) {
-		print "set-option -u -t '" session "' status"
+		if (!keep) print "set-option -u -t '" session "' status"
 		print "set-option -u -t '" session "' status-format"
 		print "set-option -qu -t '" session "' message-line"
 	} else {
@@ -242,11 +247,19 @@ function render_end(    i, k, w, out, tail) {
 			out = out (i == 0 ? "#{E:@omp_native_row}" : "") tail
 			print "set-option -t '" session "' status-format[" i "] '#{?#{==:#{W:#{window_index} }," signature "}," out "," (i == 0 ? "#{E:@omp_native_row}" : "") "}'"
 		}
-		print "set-option -t '" session "' status " (height == 1 ? "on" : height)
-		if (height > 1)
-			print "if-shell -F '#{@omp_message_line}' { set-option -q -t '" session "' message-line " (height - 1) " } { set-option -qu -t '" session "' message-line }"
-		else
+		if (bar == "shown") {
+			# A status off set after the snapshot wins over this publication.
+			print "if-shell -F -t '" session "' '#{!=:#{status},off}' {"
+			print "set-option -t '" session "' status " (height == 1 ? "on" : height)
+			if (height > 1)
+				print "if-shell -F '#{@omp_message_line}' { set-option -q -t '" session "' message-line " (height - 1) " } { set-option -qu -t '" session "' message-line }"
+			else
+				print "set-option -qu -t '" session "' message-line"
+			print "}"
+		} else {
+			if (!keep) print "set-option -u -t '" session "' status"
 			print "set-option -qu -t '" session "' message-line"
+		}
 	}
 	print "set-option -u -t '" session "' @omp_layout_error"
 	print "}"

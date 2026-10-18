@@ -16,6 +16,12 @@ status_unset() { [ -z "$(inner show-options -q -v -t "${1:-proof}" status)" ]; }
 
 no_pane_in_mode() { [ "$(inner list-panes -s -t proof -F '#{pane_in_mode}' | grep -c 1)" -eq 0 ]; }
 
+formats_unset() { [ -z "$(inner show-options -q -v -t proof status-format)" ]; }
+
+effective() { inner display-message -p -t proof '#{status}'; }
+
+settled() { eventually no_process "omp-layout.sh refresh.* .*$inner_socket"; }
+
 @test "attaching a client lays the bar out without a manual refresh" {
 	start_session 0 1 2 3 4
 	attach a 80 24
@@ -101,6 +107,53 @@ no_pane_in_mode() { [ "$(inner list-panes -s -t proof -F '#{pane_in_mode}' | gre
 	inner detach-client -s proof
 	eventually status_unset
 	[ -z "$(inner show-options -q -v -t proof status-format)" ]
+}
+
+@test "a session's own status off survives refreshes and the last client detaching" {
+	start_session 0 1 2 3 4
+	attach a 80 24
+	eventually is 3 height
+	inner set -t proof status off
+	before=$(request)
+	outer resize-window -t a -x 100 -y 24
+	eventually differs "$before" request
+	settled
+	[ "$(height)" = off ]
+	inner detach-client -s proof
+	eventually formats_unset
+	[ "$(height)" = off ]
+}
+
+@test "a global status off hides the bar at the next refresh" {
+	start_session 0 1 2 3 4
+	attach a 80 24
+	eventually is 3 height
+	inner set -g status off
+	outer resize-window -t a -x 100 -y 24
+	eventually status_unset
+	[ "$(effective)" = off ]
+}
+
+@test "prefix A s shows the bar under a global off, keeps it through refreshes and hides it again" {
+	start_session 0 1 2 3 4
+	inner set -g status off
+	attach a 80 24
+	pick a s
+	eventually is 3 height
+	eventually row_contains a 3 1 '4:w4'
+	before=$(request)
+	outer resize-window -t a -x 100 -y 24
+	eventually differs "$before" request
+	settled
+	[ "$(height)" = 3 ]
+	pick a s
+	eventually is off height
+	inner set -g status on
+	before=$(request)
+	outer resize-window -t a -x 80 -y 24
+	eventually differs "$before" request
+	settled
+	[ "$(height)" = off ]
 }
 
 @test "a client switching sessions lays out the session it joins and resets the one it left" {
