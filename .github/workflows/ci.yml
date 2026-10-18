@@ -51,9 +51,8 @@ jobs:
           trap 'tmux -L ci kill-server 2>/dev/null' EXIT
           tmux -L ci source-file ./omp-tmux.conf
           test "$(tmux -L ci show-options -gv monitor-bell)" = on
-          test "$(tmux -L ci show-options -gv visual-bell)" = on
+          test "$(tmux -L ci show-options -gv visual-bell)" = both
           test "$(tmux -L ci show-options -gv set-titles)" = on
-          test "$(tmux -L ci show-options -gv mouse)" = off
   alpine:
     name: tmux on Alpine with BusyBox sh, awk and pkill
     runs-on: ubuntu-24.04

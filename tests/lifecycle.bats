@@ -14,6 +14,8 @@ lacks() { ! row_contains "$@"; }
 
 status_unset() { [ -z "$(inner show-options -q -v -t "${1:-proof}" status)" ]; }
 
+no_pane_in_mode() { [ "$(inner list-panes -s -t proof -F '#{pane_in_mode}' | grep -c 1)" -eq 0 ]; }
+
 @test "attaching a client lays the bar out without a manual refresh" {
 	start_session 0 1 2 3 4
 	attach a 80 24
@@ -183,7 +185,7 @@ status_unset() { [ -z "$(inner show-options -q -v -t "${1:-proof}" status)" ]; }
 		;;
 	esac
 	for hook in $hooks_expected; do
-		[ "$(echo "$hooks" | grep "^$hook\[100\]" | grep -c '@omp_layout')" -eq 1 ]
+		[ "$(echo "$hooks" | grep "^$hook\[100\]" | grep -cE '@omp_(layout|refresh)')" -eq 1 ]
 		[ "$(echo "$hooks" | grep -c "^$hook\[")" -eq "$([ "$hook" = client-resized ] && echo 2 || echo 1)" ]
 	done
 	echo "$hooks" | grep -qF 'client-resized[5] display-message mine'
@@ -201,4 +203,19 @@ status_unset() { [ -z "$(inner show-options -q -v -t "${1:-proof}" status)" ]; }
 	inner set -g @omp_max_rows 5
 	eventually row_contains a 3 1 '4:w8'
 	[ -z "$(inner show-options -q -v -t proof @omp_layout_error)" ]
+}
+
+@test "a failing hook or reload refresh never puts a pane in view mode" {
+	start_session 0 1 2 3 4
+	attach a 80 24
+	eventually is 3 height
+	inner set -g @omp_max_rows x
+	outer resize-window -t a -x 100 -y 24
+	eventually is 1 messages_with '@omp_max_rows must be'
+	eventually no_process "omp-layout.sh refresh .*$inner_socket"
+	# tmux reports the job's exit status after the process ends, so the check waits for that.
+	sleep 0.5
+	no_pane_in_mode
+	inner source-file "$root/omp-tmux.conf"
+	no_pane_in_mode
 }
