@@ -64,6 +64,21 @@ load helpers
 	case ${after#*$'\e[0m'} in *'1;4m'* | *$'\e[1m'* | *$'\e[4m'*) false ;; esac
 }
 
+@test "style options set before sourcing colour the cells without leaking attributes" {
+	new_session proof 0 1 2 3 4
+	inner set -g @omp_style_waiting 'fg=red,bold'
+	inner source-file "$root/omp-tmux.conf"
+	inner select-window -t proof:1
+	title 0 'π ! Pick'
+	attach a 80 24
+	eventually is '?  0:Pick           ' cell a 3 0 0 20
+	styled=$(styled_row a 3 0)
+	before=${styled%%\?*}
+	case ${before##*$'\e[0m'} in *'31m'*) ;; *) false ;; esac
+	after=${styled#*\?}
+	case ${after%%0:*} in *$'\e[0m'* | *$'\e[22m'*) ;; *) false ;; esac
+}
+
 @test "titles are literal data that never restyle or shift neighbouring cells" {
 	start_session 0 1 2 3 4
 	title 0 'π ! #H #[fg=red]%H'
