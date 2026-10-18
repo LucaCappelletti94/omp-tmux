@@ -137,9 +137,7 @@ load helpers
 	refresh
 	eventually is 3 height
 	inner set -g @omp_max_rows 2
-	outer send-keys -t a C-b A
-	eventually is omp-agent inner display-message -p '#{client_key_table}'
-	outer send-keys -t a r
+	pick a r
 	eventually is 2 height
 	eventually row_contains a 2 1 'page 1/2'
 }

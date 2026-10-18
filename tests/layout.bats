@@ -149,6 +149,16 @@ width_of() {
 	[ "$(width_of 40)" = 'width 40 grid 2 20 13 13 5 waiting,bells,priority,page,total,hints' ]
 }
 
+@test "a longer menu key widens the hints field" {
+	plan 5 20 <<-EOF
+		$(windows 0 39)
+		client 40 25 0
+		key M-a
+	EOF
+	[ "$status" -eq 0 ]
+	[ "$(width_of 40)" = 'width 40 grid 2 20 13 13 5 waiting,bells,priority,page,total,zoom,clock' ]
+}
+
 @test "a one-row allowance too narrow for a cell shows the current window compactly" {
 	plan 5 20 <<-EOF
 		$(windows 0 19)

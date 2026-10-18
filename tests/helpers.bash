@@ -144,3 +144,18 @@ ring() {
 	printf '\a' >"$(inner display-message -p -t "proof:$1" '#{pane_tty}')"
 	eventually is 1 inner display-message -p -t "proof:$1" '#{window_bell_flag}'
 }
+
+shows() { outer capture-pane -p -t "$1" | grep -qF -- "$2"; }
+hides() { ! shows "$@"; }
+
+# menu CLIENT [KEY] opens the agent menu with prefix KEY, A by default.
+menu() {
+	outer send-keys -t "$1" C-b "${2:-A}"
+	eventually shows "$1" 'omp-tmux agents'
+}
+
+# pick CLIENT KEY chooses KEY from the agent menu on CLIENT.
+pick() {
+	menu "$1"
+	outer send-keys -t "$1" "$2"
+}

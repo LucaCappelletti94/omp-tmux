@@ -14,8 +14,8 @@ Source it from `~/.tmux.conf`:
 source-file ~/github/omp-tmux/omp-tmux.conf
 ```
 
-Keep the Oh My Pi settings `completion.notify`, `ask.notify`, and `tui.titleState` at their defaults. Set `@omp_max_rows` and `@omp_label_width` before sourcing to change the row cap and the label width, which default to `5` and `20`. `prefix A` marks window priority (`h` set, `c` clear), opens pickers showing each window's signals and full label (`p` priority, `w` waiting, `d` unseen bell), and `r` lays the bar out again after changing a setting.
+Keep the Oh My Pi settings `completion.notify`, `ask.notify`, and `tui.titleState` at their defaults. `prefix A` opens a menu that marks priority (`h` set, `c` clear), opens pickers showing each window's signals and full label (`w` waiting, `d` unseen bell, `p` priority), hides or shows the bar (`s`) and lays it out again (`r`).
 
-omp-tmux owns the whole status bar, so `status-left` and `status-right` do not show. It leaves the mouse alone, best kept off for native selection and link clicking.
+`@omp_max_rows` (`5`), `@omp_label_width` (`20`) and `@omp_key` (`A`) take effect when set before sourcing. omp-tmux owns the whole status bar, so `status-left` and `status-right` do not show. It leaves the mouse alone, best kept off for native selection and link clicking.
 
 The layout helper in `scripts/` needs `sh`, `awk` and `pkill`. CI runs the tests on tmux 3.2a through 3.8 on Linux, on Alpine with BusyBox, and on Homebrew's tmux on macOS.
