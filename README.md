@@ -14,7 +14,7 @@ Source it from `~/.tmux.conf`, or install it with [TPM](https://github.com/tmux-
 source-file ~/github/omp-tmux/omp-tmux.conf
 ```
 
-Keep the Oh My Pi settings `completion.notify`, `ask.notify`, and `tui.titleState` at their defaults. `prefix A` opens a menu that marks priority (`h` set, `c` clear), opens pickers showing each window's signals and full label (`w` waiting, `d` unseen bell, `p` priority), hides or shows the bar (`s`) and lays it out again (`r`).
+Keep the Oh My Pi settings `completion.notify`, `ask.notify`, and `tui.titleState` at their defaults. `prefix A` opens a menu that marks priority (`h` set, `c` clear), opens pickers showing each window's signals and full label (`w` waiting, `d` unseen bell, `p` priority), searches windows by label or working directory (`/`, from tmux 3.3), hides or shows the bar (`s`) and lays it out again (`r`).
 
 `@omp_max_rows` (`5`), `@omp_label_width` (`20`), `@omp_key` (`A`) and the styles `@omp_style_waiting`, `@omp_style_bell`, `@omp_style_priority`, `@omp_style_working`, `@omp_style_muted` and `@omp_style_current` take effect when set before sourcing. omp-tmux owns the whole status bar, so `status-left` and `status-right` do not show. It leaves the mouse alone, best kept off for native selection and link clicking.
 
