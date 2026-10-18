@@ -38,6 +38,17 @@ load helpers
 	[ "$(cell a 3 1 0 20)" = '?^+4:Choose         ' ]
 }
 
+@test "a waiting agent in an inactive pane marks its window and the count" {
+	start_session 0 1 2 3 4
+	inner split-window -d -t proof:2 'sleep 600'
+	title 2.0 'π > Resting'
+	title 2.1 'π ! Approve the plan'
+	attach a 80 24
+	refresh
+	eventually row_contains a 3 2 '?1 '
+	[ "$(cell a 3 0 2 20)" = '?  2:Resting        ' ]
+}
+
 @test "the current cell alone is bold and underlined" {
 	start_session 0 1 2 3 4
 	inner select-window -t proof:2
