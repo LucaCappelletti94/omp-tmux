@@ -34,9 +34,13 @@ outer() { tmux -L "$outer_socket" "$@"; }
 # eventually retries a command for up to 5 seconds, so $(...) checks go through is to rerun.
 eventually() {
 	tries=0
+	unset last_output
 	until "$@"; do
 		tries=$((tries + 1))
-		[ "$tries" -lt 50 ] || return 1
+		if [ "$tries" -ge 50 ]; then
+			echo "gave up waiting for: $*${last_output+, last output: [$last_output]}" >&2
+			return 1
+		fi
 		sleep 0.1
 	done
 }
@@ -45,7 +49,8 @@ eventually() {
 is() {
 	want=$1
 	shift
-	[ "$("$@")" = "$want" ]
+	last_output=$("$@")
+	[ "$last_output" = "$want" ]
 }
 
 # differs OLD CMD... succeeds when CMD prints anything but OLD.
@@ -117,6 +122,12 @@ styled_row() { outer capture-pane -e -p -t "$1" | tail -n "$2" | sed -n "$(($3 +
 row_contains() {
 	case $(row "$1" "$2" "$3") in *"$4"*) return 0 ;; esac
 	return 1
+}
+
+# starts CLIENT ROWS K TEXT succeeds when status row K begins with TEXT.
+starts() {
+	last_output=$(row "$1" "$2" "$3")
+	[ "${last_output:0:${#4}}" = "$4" ]
 }
 
 cell() {
