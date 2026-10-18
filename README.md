@@ -8,7 +8,7 @@ Oh My Pi keeps each pane title updated as `π <sep> <label>`, with `>` idle, `!`
 
 Cells wrap onto extra status rows, up to five and never more than a fifth of the terminal height, above a summary row counting waiting agents, unseen bells and priority windows across the whole session. When the fleet still does not fit, the bar shows the page holding the current window. The layout follows resizes, attaching terminals and new, closed or moved windows by itself.
 
-Source it from `~/.tmux.conf`:
+Source it from `~/.tmux.conf`, or install it with [TPM](https://github.com/tmux-plugins/tpm) as `set -g @plugin 'LucaCappelletti94/omp-tmux'`:
 
 ```
 source-file ~/github/omp-tmux/omp-tmux.conf

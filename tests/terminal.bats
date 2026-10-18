@@ -41,6 +41,15 @@ prompt_row() {
 	[ "$(inner show-options -gv status-interval)" = 7 ]
 }
 
+@test "the TPM entry script loads the configuration" {
+	new_session proof 0 1 2 3 4
+	socket=$(inner display-message -p '#{socket_path}')
+	TMUX="$socket,$$,0" "$root/omp-tmux.tmux"
+	attach a 80 24
+	eventually is 3 height
+	eventually row_contains a 3 1 '4:w4'
+}
+
 @test "reloading returns without waiting for the layout helper" {
 	real_tmux=$(command -v tmux)
 	mkdir "$BATS_TEST_TMPDIR/shim"
