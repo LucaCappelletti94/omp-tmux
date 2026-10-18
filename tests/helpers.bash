@@ -2,6 +2,15 @@
 # client, so its capture-pane sees the real status rows.
 
 setup() {
+	# Tests run as the invoking user, so on a workstation one stray kill reaches every session.
+	if [ ! -f /.dockerenv ] && [ ! -f /run/.containerenv ] && [ "${CI:-}" != true ]; then
+		echo "refusing to start tmux outside a container, run tests/run.sh" >&2
+		return 1
+	fi
+	# No test may reach a tmux server it did not start, even through an inherited TMUX.
+	unset TMUX
+	isolated_tmpdir=$(mktemp -d /tmp/omp-tmux.XXXXXX)
+	export TMUX_TMPDIR="$isolated_tmpdir"
 	# macOS has no C.UTF-8, so CI passes its own UTF-8 locale.
 	export LC_ALL="${LC_ALL:-C.UTF-8}"
 	root="$BATS_TEST_DIRNAME/.."
@@ -11,9 +20,12 @@ setup() {
 	printf 'set -g status off\nset -g remain-on-exit on\n' >"$BATS_TEST_TMPDIR/outer.conf"
 }
 
+# Only a setup that got past the guard owns servers to stop, and only in its own socket directory.
 teardown() {
-	tmux -L "$outer_socket" kill-server 2>/dev/null || true
-	tmux -L "$inner_socket" kill-server 2>/dev/null || true
+	[ -n "${isolated_tmpdir:-}" ] || return 0
+	TMUX_TMPDIR="$isolated_tmpdir" tmux -L "$outer_socket" kill-server 2>/dev/null || true
+	TMUX_TMPDIR="$isolated_tmpdir" tmux -L "$inner_socket" kill-server 2>/dev/null || true
+	rm -rf "$isolated_tmpdir"
 }
 
 inner() { tmux -L "$inner_socket" "$@"; }

@@ -2,6 +2,9 @@
 # Installs tmux $TMUX_VERSION (apt, apk, brew, master or a release tag) and pinned bats-core.
 set -eu
 
+bats_version=v1.11.1
+bats_commit=b640ec3cf2c7c9cfc9e6351479261186f76eeec8
+
 case $TMUX_VERSION in
 apt)
 	sudo apt-get update -qq
@@ -28,8 +31,8 @@ brew)
 	;;
 esac
 
-git clone -q --depth 1 --branch "$BATS_VERSION" https://github.com/bats-core/bats-core.git "$RUNNER_TEMP/bats"
-[ "$(git -C "$RUNNER_TEMP/bats" rev-parse HEAD)" = "$BATS_COMMIT" ]
+git clone -q --depth 1 --branch "$bats_version" https://github.com/bats-core/bats-core.git "$RUNNER_TEMP/bats"
+[ "$(git -C "$RUNNER_TEMP/bats" rev-parse HEAD)" = "$bats_commit" ]
 echo "$RUNNER_TEMP/bats/bin" >>"$GITHUB_PATH"
 command -v tmux
 tmux -V

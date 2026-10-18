@@ -38,8 +38,6 @@ jobs:
       LANG: ${{ matrix.locale }}
       LC_ALL: ${{ matrix.locale }}
       TMUX_VERSION: ${{ matrix.tmux }}
-      BATS_VERSION: v1.11.1
-      BATS_COMMIT: b640ec3cf2c7c9cfc9e6351479261186f76eeec8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install tmux and bats-core
@@ -65,8 +63,6 @@ jobs:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
       TMUX_VERSION: apk
-      BATS_VERSION: v1.11.1
-      BATS_COMMIT: b640ec3cf2c7c9cfc9e6351479261186f76eeec8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install tmux and bats-core
@@ -117,8 +113,8 @@ jobs:
           chmod +x bin/shfmt
           echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
       - name: ShellCheck
-        run: shellcheck scripts/omp-layout.sh .github/ci-setup.sh && shellcheck -s bash tests/*.bats tests/helpers.bash
+        run: shellcheck scripts/omp-layout.sh .github/ci-setup.sh tests/run.sh && shellcheck -s bash tests/*.bats tests/helpers.bash
       - name: shfmt
-        run: shfmt -d scripts/omp-layout.sh .github/ci-setup.sh tests/*.bats tests/helpers.bash
+        run: shfmt -d scripts/omp-layout.sh .github/ci-setup.sh tests/run.sh tests/*.bats tests/helpers.bash
       - name: actionlint
         run: actionlint
