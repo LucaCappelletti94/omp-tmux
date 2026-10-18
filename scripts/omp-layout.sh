@@ -19,7 +19,7 @@ usage() {
 
 tm() { tmux -S "$socket" "$@"; }
 
-# The stale guard retries every second, so each distinct failure shows once. The text goes in
+# The stale guard retries at every redraw, so each distinct failure shows once. The text goes in
 # through argv, and if-shell checks and records its checksum in one atomic command.
 report() {
 	key="@omp_layout_message_$$"

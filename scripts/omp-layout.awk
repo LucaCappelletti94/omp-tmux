@@ -229,6 +229,7 @@ function render_end(    i, k, w, out, tail) {
 	if (native) {
 		print "set-option -u -t '" session "' status"
 		print "set-option -u -t '" session "' status-format"
+		print "set-option -qu -t '" session "' message-line"
 	} else {
 		for (i = 0; i < height; i++) {
 			out = ""; tail = ""
@@ -242,6 +243,10 @@ function render_end(    i, k, w, out, tail) {
 			print "set-option -t '" session "' status-format[" i "] '#{?#{==:#{W:#{window_index} }," signature "}," out "," (i == 0 ? "#{E:@omp_native_row}" : "") "}'"
 		}
 		print "set-option -t '" session "' status " (height == 1 ? "on" : height)
+		if (height > 1)
+			print "if-shell -F '#{@omp_message_line}' { set-option -q -t '" session "' message-line " (height - 1) " } { set-option -qu -t '" session "' message-line }"
+		else
+			print "set-option -qu -t '" session "' message-line"
 	}
 	print "set-option -u -t '" session "' @omp_layout_error"
 	print "}"
