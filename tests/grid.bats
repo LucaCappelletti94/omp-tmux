@@ -38,6 +38,18 @@ load helpers
 	[ "$(cell a 3 1 0 20)" = '?^+4:Choose         ' ]
 }
 
+@test "a waiting agent in an inactive pane marks its window and the count" {
+	start_session 0 1 2 3 4
+	inner split-window -d -t proof:2 'sleep 600'
+	title 2.0 'π > Resting'
+	title 2.1 'π ! Approve the plan'
+	attach a 80 24
+	refresh
+	# The native row also shows the counts, so only the cell itself proves the layout drew.
+	eventually is '?  2:Resting        ' cell a 3 0 2 20
+	row_contains a 3 2 '?1 '
+}
+
 @test "the current cell alone is bold and underlined" {
 	start_session 0 1 2 3 4
 	inner select-window -t proof:2
@@ -157,9 +169,9 @@ load helpers
 	inner select-window -t proof:7
 	attach a 30 9
 	refresh
-	eventually row_contains a 1 0 ' 7:w7'
+	# The native row also contains " 7:w7", so only the compact cell's exact start proves the layout drew.
+	eventually starts a 1 0 '    7:w7'
 	only=$(row a 1 0)
-	[ "${only:0:8}" = '    7:w7' ]
 	case $only in *' 6:'* | *' 8:'*) false ;; esac
 	case $only in *' ?0  +0  ^0 ') ;; *) false ;; esac
 }

@@ -40,6 +40,15 @@ fleet() {
 	shows a 'proof: ?2 +2 ^1'
 }
 
+@test "the waiting picker lists a window whose inactive pane waits" {
+	fleet
+	inner split-window -d -t proof:3 'sleep 600'
+	title 3.1 'π ! Approve the plan'
+	pick w
+	eventually shows a '3: ? + Resting'
+	shows a 'proof: ?3 +2 ^1'
+}
+
 @test "the unseen bell and priority pickers show the same rows" {
 	fleet
 	pick d

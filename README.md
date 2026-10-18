@@ -4,7 +4,7 @@
 
 Live tmux status grid for [Oh My Pi](https://github.com/can1357/oh-my-pi) agents.
 
-Oh My Pi keeps each pane title updated as `π <sep> <label>`, with `>` idle, `!` waiting for input and a braille spinner while working. Every window becomes a fixed-width cell showing that state, a purple `^` for manual priority, a green `+` for a bell you have not seen yet, its index and its live label. Titles travel through the pty, so no agent can ever relabel another's window.
+Oh My Pi keeps each pane title updated as `π <sep> <label>`, with `>` idle, `!` waiting for input and a braille spinner while working. Every window becomes a fixed-width cell showing that state, waiting as soon as any of its panes waits, a purple `^` for manual priority, a green `+` for a bell you have not seen yet, its index and its live label. Titles travel through the pty, so no agent can ever relabel another's window.
 
 Cells wrap onto extra status rows, up to five and never more than a fifth of the terminal height, above a summary row counting waiting agents, unseen bells and priority windows across the whole session. When the fleet still does not fit, the bar shows the page holding the current window. The layout follows resizes, attaching terminals and new, closed or moved windows by itself.
 
