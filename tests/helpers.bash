@@ -145,6 +145,27 @@ ring() {
 	eventually is 1 inner display-message -p -t "proof:$1" '#{window_bell_flag}'
 }
 
+# rss prints the inner server's resident memory in kB. BusyBox ps has no -p, so Linux reads /proc.
+rss() {
+	pid=$(inner display-message -p '#{pid}')
+	if [ -r "/proc/$pid/status" ]; then awk '/^VmRSS:/ { print $2 }' "/proc/$pid/status"; else ps -o rss= -p "$pid"; fi
+}
+
+# growth ROUNDS FORMAT prints how many kB the inner server grows while expanding FORMAT 500 times
+# a round. tmux 3.2a rejects display-message -c, so the expansion relies on the only attached client.
+# A first round runs before the baseline so allocator warm-up is not counted.
+growth() {
+	inner set -g @omp_probe "$(awk -v f="$2" 'BEGIN { for (i = 0; i < 500; i++) printf "%s", f }')"
+	inner display-message -p '#{E:@omp_probe}' >/dev/null
+	before=$(rss)
+	round=0
+	while [ "$round" -lt "$1" ]; do
+		inner display-message -p '#{E:@omp_probe}' >/dev/null
+		round=$((round + 1))
+	done
+	echo $(($(rss) - before))
+}
+
 shows() { outer capture-pane -p -t "$1" | grep -qF -- "$2"; }
 hides() { ! shows "$@"; }
 

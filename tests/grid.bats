@@ -108,6 +108,36 @@ load helpers
 	[ "${third:14:12}" = '·  3:日本語の解析で' ]
 }
 
+@test "cutting labels and the session name never grows the server's memory" {
+	start_session 0 1 2 3 4
+	if [ "$(inner display-message -p '#{m/r:^3[.][23],#{version}}')" = 1 ]; then
+		skip 'tmux 3.2a and 3.3a leak every value q/h quotes, cut or not'
+	fi
+	for i in 0 1 2 3 4; do title "$i" 'π > abcdefghijklmnopqrstuvwxyz'; done
+	inner rename-session -t proof a-very-long-session
+	attach a 80 24 a-very-long-session
+	refresh
+	eventually is 3 height a-very-long-session
+	# Every probe must really cut, or a version that leaks would pass without being exercised.
+	grid_row=$(inner display-message -p '#{E:status-format[0]}')
+	summary_row=$(inner display-message -p '#{E:status-format[2]}')
+	native_row=$(inner display-message -p '#{W:#{E:window-status-format}}')
+	printf 'grid %s\nsummary %s\nnative %s\n' "$grid_row" "$summary_row" "$native_row"
+	case $grid_row in *'0:abcdefghijklm…'*'3:abcdefghijklm…'*) ;; *) false ;; esac
+	case $summary_row in *' [a-very-long…] '*) ;; *) false ;; esac
+	case $native_row in *'0:abcdefghijklmnopqrs…'*'4:abcdefghijklmnopqrs…'*) ;; *) false ;; esac
+	# On tmux before 3.7 the summary's single cut leaks about 0.9 MB per 20000 expansions, and a
+	# row of cut cells about 7 MB. Pages freed by a larger probe would absorb a smaller probe's
+	# leak, so the smallest runs first.
+	summary=$(growth 100 '#{E:@omp_sum_session}')
+	native=$(growth 40 '#{W:#{E:window-status-format}}')
+	grid=$(growth 40 '#{E:status-format[0]}')
+	echo "growth in kB: summary $summary, native $native, grid $grid"
+	[ "$summary" -lt 500 ]
+	[ "$native" -lt 500 ]
+	[ "$grid" -lt 500 ]
+}
+
 @test "state, priority, bell and label changes never move cells or resize the bar" {
 	start_session 0 1 2 3 4
 	attach a 80 24
