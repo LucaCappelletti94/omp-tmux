@@ -110,9 +110,6 @@ load helpers
 
 @test "cutting labels and the session name never grows the server's memory" {
 	start_session 0 1 2 3 4
-	if [ "$(inner display-message -p '#{m/r:^3[.][23],#{version}}')" = 1 ]; then
-		skip 'tmux 3.2a and 3.3a leak every value q/h quotes, cut or not'
-	fi
 	for i in 0 1 2 3 4; do title "$i" 'π > abcdefghijklmnopqrstuvwxyz'; done
 	inner rename-session -t proof a-very-long-session
 	attach a 80 24 a-very-long-session
