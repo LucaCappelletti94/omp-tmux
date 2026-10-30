@@ -106,6 +106,27 @@ fleet() {
 	case $(outer capture-pane -e -p -t a | grep -F '#H') in *$'\e[31m'*) false ;; esac
 }
 
+# tmux 3.8 adds the pane title to each pane preview's label.
+from_3_8() {
+	case $(tmux -V) in 'tmux '[0-2].* | 'tmux 3.'[0-7] | 'tmux 3.'[0-7][!0-9]*) return 1 ;; esac
+}
+
+@test "pane rows and preview labels in a picker are literal text" {
+	fleet
+	inner rename-window -t proof:2 'w#[fg=red]x'
+	inner split-window -d -t proof:2 'sleep 600'
+	title 2.1 'π ! #H #[fg=red] %H'
+	pick a w
+	eventually shows a '2: ?   Choose a route between the two parsers'
+	shows a '2:w#[fg=red]x'
+	# choose-tree selects the session row first, so Down reaches window 2 and Right expands it.
+	outer send-keys -t a Down Right
+	eventually shows a '1: π ! #H #[fg=red] %H'
+	if from_3_8; then shows a '1:π ! #H #[fg=red] %H'; fi
+	# tmux colours the current preview label red itself, so only lines holding the literal text are checked.
+	case $(outer capture-pane -e -p -t a | grep -F '#H #[fg=red]') in *$'\e[31m'*) false ;; esac
+}
+
 @test "choosing a picker row switches to that window" {
 	fleet
 	pick a w

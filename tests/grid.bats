@@ -79,15 +79,30 @@ load helpers
 	case ${after%%0:*} in *$'\e[0m'* | *$'\e[22m'*) ;; *) false ;; esac
 }
 
-@test "titles are literal data that never restyle or shift neighbouring cells" {
+@test "titles and window names are literal data that never restyle or shift neighbouring cells" {
 	start_session 0 1 2 3 4
 	title 0 'π ! #H #[fg=red]%H'
+	inner rename-window -t proof:2 'w#[fg=red]x'
 	attach a 80 24
 	refresh
 	eventually row_contains a 3 1 '4:'
 	[ "$(cell a 3 0 0 20)" = '?  0:#H #[fg=red]%H ' ]
 	[ "$(cell a 3 0 1 20 | cut -c4-5)" = '1:' ]
+	[ "$(cell a 3 0 2 20)" = '   2:w#[fg=red]x    ' ]
 	case $(styled_row a 3 0) in *$'\e[31m'*) false ;; esac
+}
+
+@test "the session name is literal data, whole or cut" {
+	start_session 0 1 2 3 4
+	attach a 80 24
+	refresh
+	eventually is 3 height
+	inner rename-session -t "$session_id" 'x#[fg=red]y'
+	eventually row_contains a 3 2 ' [x#[fg=red]y] '
+	case $(styled_row a 3 2) in *$'\e[31m'*) false ;; esac
+	inner rename-session -t "$session_id" 'a#[fg=red]b-long-session'
+	eventually row_contains a 3 2 ' [a#[fg=red]b…] '
+	case $(styled_row a 3 2) in *$'\e[31m'*) false ;; esac
 }
 
 @test "labels longer than the budget end in an ellipsis inside the cell" {
@@ -108,9 +123,14 @@ load helpers
 	[ "${third:14:12}" = '·  3:日本語の解析で' ]
 }
 
-@test "cutting labels and the session name never grows the server's memory" {
+@test "drawing cut labels, the session name and the hints never grows the server's memory" {
+	# A fixed glibc mmap threshold keeps each probe's large expansions off the heap, whose growth would
+	# otherwise read as a leak. Other C libraries ignore it.
+	export MALLOC_MMAP_THRESHOLD_=131072
 	start_session 0 1 2 3 4
-	for i in 0 1 2 3 4; do title "$i" 'π > abcdefghijklmnopqrstuvwxyz'; done
+	for i in 0 1 2 4; do title "$i" 'π > abcdefghijklmnopqrstuvwxyz'; done
+	# Window 3 has no omp title, so its cells cut the window name.
+	inner rename-window -t proof:3 abcdefghijklmnopqrstuvwxyz
 	inner rename-session -t proof a-very-long-session
 	attach a 80 24 a-very-long-session
 	refresh
@@ -122,14 +142,16 @@ load helpers
 	printf 'grid %s\nsummary %s\nnative %s\n' "$grid_row" "$summary_row" "$native_row"
 	case $grid_row in *'0:abcdefghijklm…'*'3:abcdefghijklm…'*) ;; *) false ;; esac
 	case $summary_row in *' [a-very-long…] '*) ;; *) false ;; esac
-	case $native_row in *'0:abcdefghijklmnopqrs…'*'4:abcdefghijklmnopqrs…'*) ;; *) false ;; esac
+	case $native_row in *'0:abcdefghijklmnopqrs…'*'3:abcdefghijklmnopqrs…'*'4:abcdefghijklmnopqrs…'*) ;; *) false ;; esac
 	# On tmux before 3.7 the summary's single cut leaks about 0.9 MB per 20000 expansions, and a
 	# row of cut cells about 7 MB. Pages freed by a larger probe would absorb a smaller probe's
 	# leak, so the smallest runs first.
+	hints=$(growth 100 '#{E:@omp_sum_hints}')
 	summary=$(growth 100 '#{E:@omp_sum_session}')
 	native=$(growth 40 '#{W:#{E:window-status-format}}')
 	grid=$(growth 40 '#{E:status-format[0]}')
-	echo "growth in kB: summary $summary, native $native, grid $grid"
+	echo "growth in kB: hints $hints, summary $summary, native $native, grid $grid"
+	[ "$hints" -lt 500 ]
 	[ "$summary" -lt 500 ]
 	[ "$native" -lt 500 ]
 	[ "$grid" -lt 500 ]
