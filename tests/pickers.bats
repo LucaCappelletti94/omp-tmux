@@ -106,6 +106,25 @@ fleet() {
 	case $(outer capture-pane -e -p -t a | grep -F '#H') in *$'\e[31m'*) false ;; esac
 }
 
+# tmux 3.8 draws each preview's label from tree-mode-preview-format.
+has_preview_format() { inner show-options -gv tree-mode-preview-format >/dev/null 2>&1; }
+
+@test "pane rows and preview labels in a picker are literal text" {
+	fleet
+	inner rename-window -t proof:2 'w#[fg=red]x'
+	inner split-window -d -t proof:2 'sleep 600'
+	title 2.1 'π ! #H #[fg=red] %H'
+	pick a w
+	eventually shows a '2: ?   Choose a route between the two parsers'
+	shows a '2:w#[fg=red]x'
+	# choose-tree selects the session row first, so Down reaches window 2 and Right expands it.
+	outer send-keys -t a Down Right
+	eventually shows a '1: π ! #H #[fg=red] %H'
+	if has_preview_format; then shows a '1:π ! #H #[fg=red] %H'; fi
+	# tmux colours the current preview label red itself, so only the tree row is checked for red.
+	case $(outer capture-pane -e -p -t a | grep -F '1: π ! #H') in *$'\e[31m'*) false ;; esac
+}
+
 @test "choosing a picker row switches to that window" {
 	fleet
 	pick a w
