@@ -159,9 +159,10 @@ stage == "render" && $1 == "row" {
 	if (!(($2, $3) in page_last) || $6 + 0 > page_last[$2, $3] + 0) page_last[$2, $3] = $6
 }
 
-# Width is measured on @omp_cell_raw because hash escapes in @omp_cell_text skew it.
+# Width is measured on @omp_cell_raw because hash escapes in @omp_cell_text skew it. The ellipsis
+# follows the cut because tmux before 3.7 leaks every value its #{=/N/marker:} form cuts.
 function label(b, source,    trimmed) {
-	trimmed = b == 1 ? "…" : "#{=/" (b - 1) "/…:#{E:" source "}}"
+	trimmed = b == 1 ? "…" : "#{=" (b - 1) ":#{E:" source "}}…"
 	return "#{?#{e|>:#{E:@omp_cell_width}," b "}," trimmed ",#{E:" source "}}"
 }
 
