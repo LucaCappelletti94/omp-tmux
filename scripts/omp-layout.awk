@@ -13,17 +13,17 @@ function fail(message) {
 
 # Summary field widths in cells, each including its leading space.
 function field_width(name, pages) {
-	if (name == "waiting" || name == "bells" || name == "priority") return 2 + count_digits
+	if (name == "urgent" || name == "waiting" || name == "bells" || name == "priority" || name == "done") return 2 + count_digits
 	if (name == "page") return 7 + 2 * digits(pages)
 	if (name == "total") return 9 + count_digits
-	if (name == "hints") return 7 + length(hint_key)
+	if (name == "hints") return 11 + length(hint_key)
 	if (name == "session") return 15
 	if (name == "zoom") return 2
 	if (name == "clock") return 6
 }
 
 function summary_fields(avail, pages,    order, count, i, name, w, out) {
-	count = split("waiting bells priority page total hints session zoom clock", order, " ")
+	count = split("urgent waiting bells priority done page total hints session zoom clock", order, " ")
 	out = ""
 	for (i = 1; i <= count; i++) {
 		name = order[i]
@@ -46,8 +46,8 @@ function plan_compact(w,    avail, out, count, order, sizes, i, budget) {
 		return
 	}
 	avail = w - index_digits
-	count = split("state waiting bells priority flags", order, " ")
-	split("1 " 2 + count_digits " " 2 + count_digits " " 2 + count_digits " 2", sizes, " ")
+	count = split("state urgent waiting bells priority done flags", order, " ")
+	split("1 " 2 + count_digits " " 2 + count_digits " " 2 + count_digits " " 2 + count_digits " " 2 + count_digits " 2", sizes, " ")
 	out = ""
 	for (i = 1; i <= count; i++) {
 		if (sizes[i] > avail) continue
@@ -67,7 +67,7 @@ function plan_width(w,    cols, cell, field, budget, core, cap, pages, p, r, s, 
 	field = cell - index_digits - 5
 	if (field < 1) { plan_compact(w); return }
 	budget = min(label_width, field)
-	core = 3 * (2 + count_digits)
+	core = 5 * (2 + count_digits)
 	if (height == 1 && fits_line[w]) {
 		print "width", w, "line", cols, cell, budget, field, 1, summary_fields(w - window_count * cell, 1)
 		print_rows(w, 0, 0, 0, window_count - 1)
@@ -136,7 +136,7 @@ function plan_end(    i, w, allowance, target, minimum, needed, line) {
 		columns[w] = max(1, min(ceil_div(w, target), max(1, int(w / minimum))))
 		cells[w] = int(w / columns[w])
 		if (cells[w] - index_digits - 5 < 1) continue
-		fits_line[w] = window_count * cells[w] + 3 * (2 + count_digits) <= w
+		fits_line[w] = window_count * cells[w] + 5 * (2 + count_digits) <= w
 		if (!fits_line[w]) needed = max(needed, ceil_div(window_count, columns[w]) + 1)
 	}
 	height = min(allowance, needed)
@@ -209,7 +209,7 @@ function summary(w,    names, count, i, out, numbers, p, q) {
 			out = out " page " by_page(w, numbers)
 		} else if (names[i] == "clock") {
 			out = out "#[align=right] %H:%M"
-		} else if (names[i] ~ /^(waiting|bells|priority|total|hints|session|zoom)$/) {
+		} else if (names[i] ~ /^(urgent|waiting|bells|priority|done|total|hints|session|zoom)$/) {
 			out = out "#{E:@omp_sum_" names[i] "}"
 		}
 	}

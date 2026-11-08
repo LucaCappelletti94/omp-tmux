@@ -124,6 +124,17 @@ row_contains() {
 	return 1
 }
 
+# glyph_styled STYLED GLYPH PREVIOUS CODE succeeds when the escapes between the label PREVIOUS (or
+# the row start when empty) and GLYPH set CODE, and the escapes between GLYPH and its index clear it.
+glyph_styled() {
+	seg=${1%%"$2"*}
+	[ -z "$3" ] || seg=${seg#*"$3"}
+	case $seg in *"$4"*) ;; *) return 1 ;; esac
+	seg=${1#*"$2"}
+	seg=${seg%%:*}
+	case $seg in *$'\e[0m'* | *$'\e[39m'* | *'38;5;250m'*) ;; *) return 1 ;; esac
+}
+
 # starts CLIENT ROWS K TEXT succeeds when status row K begins with TEXT.
 starts() {
 	last_output=$(row "$1" "$2" "$3")
