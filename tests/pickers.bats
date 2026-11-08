@@ -25,7 +25,7 @@ fleet() {
 	start_session 0 1 2 3 4
 	attach a 100 30
 	menu a
-	for entry in 'Waiting windows:w' 'Unseen bells:d' 'Priority windows:p' 'Search windows:/' 'Mark priority:h' \
+	for entry in 'Urgent windows:u' 'Waiting windows:w' 'Unseen bells:d' 'Priority windows:p' 'Done windows:x' 'Search windows:/' 'Mark priority:h' \
 		'Clear priority:c' 'Hide the bar:s' 'Lay out the bar again:r'; do
 		outer capture-pane -p -t a | grep -qE "${entry%:*} +\(${entry#*:}\)"
 	done
@@ -73,7 +73,7 @@ fleet() {
 	shows a '4: ?^+ Choose'
 	hides a '1: '
 	hides a 'other'
-	shows a 'proof: ?2 +2 ^1'
+	shows a 'proof: !0 ?2 +2 ^1 ✓0'
 }
 
 @test "the waiting picker lists a window whose inactive pane waits" {
@@ -82,7 +82,46 @@ fleet() {
 	title 3.1 'π ! Approve the plan'
 	pick a w
 	eventually shows a '3: ? + Resting'
-	shows a 'proof: ?3 +2 ^1'
+	shows a 'proof: !0 ?3 +2 ^1 ✓0'
+}
+
+@test "the urgent and done pickers list only their windows, with their signals and full labels" {
+	start_session 0 1 2 3 4
+	inner set-option -p -t proof:0.0 @omp_state urgent
+	inner set-option -p -t proof:2.0 @omp_state 'done'
+	inner set-option -p -t proof:4.0 @omp_state sleeping
+	title 0 'π > Burning'
+	title 2 'π > Mapped'
+	title 4 'π > On a job'
+	attach a 100 30
+	pick a u
+	eventually is 1 in_mode
+	eventually shows a '0: !   Burning'
+	hides a '2: '
+	hides a '4: '
+	shows a 'proof: !1 ?0 +0 ^0 ✓1'
+	outer send-keys -t a q
+	eventually is 0 in_mode
+	pick a x
+	eventually shows a '2: ✓   Mapped'
+	hides a '0: '
+	hides a '4: '
+	shows a 'proof: !1 ?0 +0 ^0 ✓1'
+}
+
+@test "the waiting picker also lists idle windows whose state is reply" {
+	start_session 0 1 2 3
+	inner set-option -p -t proof:1.0 @omp_state reply
+	inner set-option -p -t proof:2.0 @omp_state 'done'
+	title 1 'π > Decide'
+	title 2 'π > Mapped'
+	attach a 100 30
+	pick a w
+	eventually is 1 in_mode
+	eventually shows a '1: ?   Decide'
+	hides a '2: '
+	hides a '0: '
+	shows a 'proof: !0 ?1 +0 ^0 ✓1'
 }
 
 @test "the unseen bell and priority pickers show the same rows" {
@@ -138,12 +177,16 @@ has_preview_format() { inner show-options -gv tree-mode-preview-format >/dev/nul
 	start_session 0 1 2 3 4
 	inner select-window -t proof:3
 	attach a 100 30
+	pick a u
+	eventually is 1 messages_with 'omp-tmux: no window is urgent'
 	pick a w
 	eventually is 1 messages_with 'omp-tmux: no window is waiting for input'
 	pick a d
 	eventually is 1 messages_with 'omp-tmux: no window has an unseen bell'
 	pick a p
 	eventually is 1 messages_with 'omp-tmux: no window is marked priority'
+	pick a x
+	eventually is 1 messages_with 'omp-tmux: no window is done'
 	[ "$(in_mode)" = 0 ]
 	[ "$(inner display-message -p -t proof '#{window_index}')" = 3 ]
 }

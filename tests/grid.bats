@@ -16,7 +16,7 @@ load helpers
 	[ "${first:43:2}" = '2:' ]
 	[ "${first:63:2}" = '3:' ]
 	summary=$(row a 3 2)
-	case $summary in *'?0 +0 ^0 5 windows A w/d/p ['*'] '*) ;; *) false ;; esac
+	case $summary in *'!0 ?0 +0 ^0 ✓0 5 windows A u/w/d/p/x ['*'] '*) ;; *) false ;; esac
 	[[ $summary =~ [0-9][0-9]:[0-9][0-9]$ ]]
 }
 
@@ -223,7 +223,7 @@ load helpers
 	only=$(row a 1 0)
 	[ "${only:3:2}" = '8:' ]
 	[ "${only:23:2}" = '9:' ]
-	case $only in *' ?0  +0  ^0  page 5/5 10 windows A w/d/p') ;; *) false ;; esac
+	case $only in *' !0  ?0  +0  ^0  ✓0  page 5/5 10 windows') ;; *) false ;; esac
 }
 
 @test "a terminal too narrow for a cell shows only the current window" {
@@ -235,7 +235,7 @@ load helpers
 	eventually starts a 1 0 '    7:w7'
 	only=$(row a 1 0)
 	case $only in *' 6:'* | *' 8:'*) false ;; esac
-	case $only in *' ?0  +0  ^0 ') ;; *) false ;; esac
+	case $only in *' !0  ?0  +0  ^0  ✓0 ') ;; *) false ;; esac
 }
 
 @test "an invalid option keeps the last layout and says why" {
@@ -282,4 +282,153 @@ load helpers
 	[ "$(height)" = 3 ]
 	eventually is 1 messages_with 'omp-tmux: layout refresh exceeded 2 seconds'
 	eventually no_process 'sleep 47'
+}
+
+# The @omp_state pane option, written by omp-telegram, colours idle cells by window state.
+@test "state values colour idle cells with their own glyphs" {
+	start_session 0 1 2 3 4
+	inner set-option -p -t proof:0.0 @omp_state urgent
+	inner set-option -p -t proof:1.0 @omp_state reply
+	inner set-option -p -t proof:2.0 @omp_state sleeping
+	inner set-option -p -t proof:3.0 @omp_state 'done'
+	title 0 'π > Burning'
+	title 1 'π > Decide'
+	title 2 'π > On a job'
+	title 3 'π > Mapped'
+	attach a 80 24
+	refresh
+	eventually row_contains a 3 2 '!1 ?1 +0 ^0 ✓1'
+	[ "$(cell a 3 0 0 20)" = '!  0:Burning        ' ]
+	[ "$(cell a 3 0 1 20)" = '?  1:Decide         ' ]
+	[ "$(cell a 3 0 2 20)" = 'z  2:On a job       ' ]
+	[ "$(cell a 3 0 3 20)" = '✓  3:Mapped         ' ]
+	[ "$(cell a 3 1 0 20)" = '   4:w4             ' ]
+}
+
+@test "a window takes the first state any of its panes holds, in precedence order" {
+	start_session 0 1 2 3 4 5 6
+	inner split-window -d -t proof:0 'sleep 600'
+	inner split-window -d -t proof:1 'sleep 600'
+	inner split-window -d -t proof:2 'sleep 600'
+	inner split-window -d -t proof:3 'sleep 600'
+	inner split-window -d -t proof:4 'sleep 600'
+	inner split-window -d -t proof:5 'sleep 600'
+	title 0.0 'π ! Choose'
+	title 0.1 'π > Burning'
+	inner set-option -p -t proof:0.1 @omp_state urgent
+	title 1.0 'π ⠋ compute π value'
+	title 1.1 'crashed away'
+	inner set-option -p -t proof:1.1 @omp_state crashed
+	title 2.0 'π > Decide'
+	inner set-option -p -t proof:2.0 @omp_state reply
+	title 2.1 'π ⠙ think'
+	title 3.0 'π > On a job'
+	inner set-option -p -t proof:3.0 @omp_state sleeping
+	title 3.1 'π ⠦ grind'
+	title 4.0 'π > Mapped'
+	inner set-option -p -t proof:4.0 @omp_state 'done'
+	title 4.1 'π > On a job'
+	inner set-option -p -t proof:4.1 @omp_state sleeping
+	title 5.0 'π > Mapped'
+	inner set-option -p -t proof:5.0 @omp_state 'done'
+	title 5.1 'π > Resting'
+	title 6.0 'π > Resting'
+	attach a 80 24
+	refresh
+	eventually row_contains a 3 1 '6:'
+	[ "$(cell a 3 0 0 20)" = '!  0:Choose         ' ]
+	[ "$(cell a 3 0 1 20)" = '✗  1:compute π val… ' ]
+	[ "$(cell a 3 0 2 20)" = '?  2:Decide         ' ]
+	[ "$(cell a 3 0 3 20)" = '⠦  3:On a job       ' ]
+	[ "$(cell a 3 1 0 20)" = 'z  4:Mapped         ' ]
+	[ "$(cell a 3 1 1 20)" = '✓  5:Mapped         ' ]
+	[ "$(cell a 3 1 2 20)" = '·  6:Resting        ' ]
+}
+
+@test "state values hide once the pane title is no longer omp's, crashed shows the reverse way" {
+	start_session 0 1 2 3 4
+	inner set-option -p -t proof:0.0 @omp_state urgent
+	inner set-option -p -t proof:1.0 @omp_state crashed
+	inner set-option -p -t proof:2.0 @omp_state 'done'
+	inner set-option -p -t proof:3.0 @omp_state reply
+	inner set-option -p -t proof:4.0 @omp_state sleeping
+	attach a 80 24
+	refresh
+	eventually row_contains a 3 2 '!0 ?0 +0 ^0 ✓0'
+	[ "$(cell a 3 0 0 20)" = '   0:w0             ' ]
+	[ "$(cell a 3 0 1 20)" = '✗  1:w1             ' ]
+	[ "$(cell a 3 0 2 20)" = '   2:w2             ' ]
+	[ "$(cell a 3 0 3 20)" = '   3:w3             ' ]
+	[ "$(cell a 3 1 0 20)" = '   4:w4             ' ]
+	title 0 'π > Back'
+	title 1 'π > Restored'
+	title 2 'π > Mapped'
+	title 3 'π > Decide'
+	title 4 'π > On a job'
+	refresh
+	eventually row_contains a 3 2 '!1 ?1 +0 ^0 ✓1'
+	[ "$(cell a 3 0 0 20)" = '!  0:Back           ' ]
+	[ "$(cell a 3 0 1 20)" = '·  1:Restored       ' ]
+	[ "$(cell a 3 0 2 20)" = '✓  2:Mapped         ' ]
+	[ "$(cell a 3 0 3 20)" = '?  3:Decide         ' ]
+	[ "$(cell a 3 1 0 20)" = 'z  4:On a job       ' ]
+}
+
+@test "the summary counts urgent and done windows, and reply counts as waiting" {
+	start_session 0 1 2 3 4
+	inner set-option -p -t proof:0.0 @omp_state urgent
+	inner set-option -p -t proof:1.0 @omp_state reply
+	inner set-option -p -t proof:2.0 @omp_state 'done'
+	inner set-option -p -t proof:3.0 @omp_state 'done'
+	title 0 'π > Burning'
+	title 1 'π > Decide'
+	title 2 'π > Mapped'
+	title 3 'π > Done again'
+	attach a 80 24
+	refresh
+	eventually row_contains a 3 2 '!1 ?1 +0 ^0 ✓2 5 windows'
+}
+
+@test "state glyphs carry their default styles, cleared before the label" {
+	start_session 0 1 2 3
+	inner set-option -p -t proof:0.0 @omp_state urgent
+	inner set-option -p -t proof:1.0 @omp_state sleeping
+	inner set-option -p -t proof:2.0 @omp_state 'done'
+	inner set-option -p -t proof:3.0 @omp_state crashed
+	title 0 'π > Burning'
+	title 1 'π > On a job'
+	title 2 'π > Mapped'
+	attach a 80 24
+	refresh
+	eventually is '✗  3:w3             ' cell a 2 0 3 20
+	styled=$(styled_row a 2 0)
+	glyph_styled "$styled" '!' '' '41m'
+	glyph_styled "$styled" z '0:Burning' '46m'
+	glyph_styled "$styled" ✓ '1:On a job' '44m'
+	glyph_styled "$styled" ✗ '2:Mapped' '48;5;88m'
+}
+
+@test "the state styles take effect when set before sourcing and never leak past their glyph" {
+	new_session proof 0 1 2 3
+	inner set -g @omp_style_urgent 'fg=green,bold'
+	inner set -g @omp_style_sleeping 'fg=magenta'
+	inner set -g @omp_style_done 'fg=cyan'
+	inner set -g @omp_style_crashed 'fg=red,bold'
+	inner source-file "$root/omp-tmux.conf"
+	inner select-window -t proof:0
+	inner set-option -p -t proof:0.0 @omp_state urgent
+	inner set-option -p -t proof:1.0 @omp_state sleeping
+	inner set-option -p -t proof:2.0 @omp_state 'done'
+	inner set-option -p -t proof:3.0 @omp_state crashed
+	title 0 'π > Burning'
+	title 1 'π > On a job'
+	title 2 'π > Mapped'
+	attach a 80 24
+	refresh
+	eventually is '✗  3:w3             ' cell a 2 0 3 20
+	styled=$(styled_row a 2 0)
+	glyph_styled "$styled" '!' '' '32m'
+	glyph_styled "$styled" z '0:Burning' '35m'
+	glyph_styled "$styled" ✓ '1:On a job' '36m'
+	glyph_styled "$styled" ✗ '2:Mapped' '31m'
 }

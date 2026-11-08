@@ -33,7 +33,7 @@ width_of() {
 	[ "$status" -eq 0 ]
 	echo "$output" | grep -qx 'windows 3 1 1'
 	echo "$output" | grep -qx 'height 1'
-	[ "$(width_of 244)" = 'width 244 line 10 24 18 18 1 waiting,bells,priority,total,hints,session,zoom,clock' ]
+	[ "$(width_of 244)" = 'width 244 line 10 24 18 18 1 urgent,waiting,bells,priority,done,total,hints,session,zoom,clock' ]
 	[ "$(rows_of 244)" = '0 0 0 2' ]
 }
 
@@ -44,7 +44,7 @@ width_of() {
 	EOF
 	[ "$status" -eq 0 ]
 	echo "$output" | grep -qx 'height 3'
-	[ "$(width_of 80)" = 'width 80 grid 4 20 14 14 1 waiting,bells,priority,total,hints,session,zoom,clock' ]
+	[ "$(width_of 80)" = 'width 80 grid 4 20 14 14 1 urgent,waiting,bells,priority,done,total,hints,session,zoom,clock' ]
 	[ "$(rows_of 80)" = "$(printf '0 0 0 3\n0 1 4 4')" ]
 }
 
@@ -85,7 +85,7 @@ width_of() {
 	EOF
 	[ "$status" -eq 0 ]
 	echo "$output" | grep -qx 'height 1'
-	[ "$(width_of 80)" = 'width 80 paged 4 20 14 14 5 waiting,bells,priority,page,total,hints' ]
+	[ "$(width_of 80)" = 'width 80 paged 4 20 14 14 5 urgent,waiting,bells,priority,done,page,total' ]
 	[ "$(rows_of 80 | head -n 2)" = "$(printf '0 0 0 1\n1 0 2 3')" ]
 }
 
@@ -146,17 +146,23 @@ width_of() {
 		client 40 25 0
 	EOF
 	[ "$status" -eq 0 ]
-	[ "$(width_of 40)" = 'width 40 grid 2 20 13 13 5 waiting,bells,priority,page,total,hints' ]
+	[ "$(width_of 40)" = 'width 40 grid 2 20 13 13 5 urgent,waiting,bells,priority,done,page,total' ]
 }
 
 @test "a longer menu key widens the hints field" {
 	plan 5 20 <<-EOF
 		$(windows 0 39)
-		client 40 25 0
+		client 52 25 0
+	EOF
+	[ "$status" -eq 0 ]
+	[ "$(width_of 52)" = 'width 52 grid 2 26 19 19 5 urgent,waiting,bells,priority,done,page,total,hints' ]
+	plan 5 20 <<-EOF
+		$(windows 0 39)
+		client 52 25 0
 		key M-a
 	EOF
 	[ "$status" -eq 0 ]
-	[ "$(width_of 40)" = 'width 40 grid 2 20 13 13 5 waiting,bells,priority,page,total,zoom,clock' ]
+	[ "$(width_of 52)" = 'width 52 grid 2 26 19 19 5 urgent,waiting,bells,priority,done,page,total,zoom,clock' ]
 }
 
 @test "a one-row allowance too narrow for a cell shows the current window compactly" {
@@ -165,7 +171,7 @@ width_of() {
 		client 30 9 0
 	EOF
 	[ "$status" -eq 0 ]
-	[ "$(width_of 30)" = 'width 30 compact 1 30 12 12 1 state,waiting,bells,priority,flags,label' ]
+	[ "$(width_of 30)" = 'width 30 compact 1 30 4 4 1 state,urgent,waiting,bells,priority,done,flags,label' ]
 	[ -z "$(rows_of 30)" ]
 }
 
@@ -175,7 +181,7 @@ width_of() {
 		client 8 9 0
 	EOF
 	[ "$status" -eq 0 ]
-	[ "$(width_of 8)" = 'width 8 compact 1 8 0 0 1 state,waiting' ]
+	[ "$(width_of 8)" = 'width 8 compact 1 8 0 0 1 state,urgent' ]
 }
 
 @test "a width below the index itself keeps only an attention marker" {
