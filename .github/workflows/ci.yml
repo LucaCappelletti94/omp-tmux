@@ -15,28 +15,79 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  validate:
+  validate-pr:
     name: tmux ${{ matrix.tmux }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
-    # tmux master is a warning, never a failure of the change under test.
-    continue-on-error: ${{ matrix.tmux == 'master' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, tmux: apt, locale: C.UTF-8 }
+          - { os: ubuntu-24.04, tmux: 3.7c, locale: C.UTF-8 }
+          - { os: ubuntu-24.04, tmux: '3.8', locale: C.UTF-8 }
+    env:
+      LANG: ${{ matrix.locale }}
+      LC_ALL: ${{ matrix.locale }}
+      TMUX_VERSION: ${{ matrix.tmux }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install tmux and bats-core
+        run: sh .github/ci-setup.sh
+      - name: Run the layout and status grid tests
+        run: bats tests/
+      - name: Validate the remaining config options against a live server
+        run: |
+          set -eux
+          tmux -L ci -f /dev/null new-session -d -x 200 -y 50
+          trap 'tmux -L ci kill-server 2>/dev/null' EXIT
+          tmux -L ci source-file ./omp-tmux.conf
+          test "$(tmux -L ci show-options -gv monitor-bell)" = on
+          test "$(tmux -L ci show-options -gv visual-bell)" = both
+          test "$(tmux -L ci show-options -gv set-titles)" = on
+  validate-main:
+    name: tmux ${{ matrix.tmux }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    if: github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
         include:
           - { os: ubuntu-22.04, tmux: apt, locale: C.UTF-8 }
-          - { os: ubuntu-24.04, tmux: apt, locale: C.UTF-8 }
           - { os: ubuntu-24.04, tmux: 3.3a, locale: C.UTF-8 }
           - { os: ubuntu-24.04, tmux: 3.5a, locale: C.UTF-8 }
           - { os: ubuntu-24.04, tmux: 3.6b, locale: C.UTF-8 }
-          - { os: ubuntu-24.04, tmux: 3.7c, locale: C.UTF-8 }
-          - { os: ubuntu-24.04, tmux: '3.8', locale: C.UTF-8 }
-          - { os: ubuntu-24.04, tmux: master, locale: C.UTF-8 }
     env:
       LANG: ${{ matrix.locale }}
       LC_ALL: ${{ matrix.locale }}
       TMUX_VERSION: ${{ matrix.tmux }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install tmux and bats-core
+        run: sh .github/ci-setup.sh
+      - name: Run the layout and status grid tests
+        run: bats tests/
+      - name: Validate the remaining config options against a live server
+        run: |
+          set -eux
+          tmux -L ci -f /dev/null new-session -d -x 200 -y 50
+          trap 'tmux -L ci kill-server 2>/dev/null' EXIT
+          tmux -L ci source-file ./omp-tmux.conf
+          test "$(tmux -L ci show-options -gv monitor-bell)" = on
+          test "$(tmux -L ci show-options -gv visual-bell)" = both
+          test "$(tmux -L ci show-options -gv set-titles)" = on
+  validate-master:
+    name: tmux master on ubuntu-24.04
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # tmux master is a warning, never a failure of the change under test.
+    continue-on-error: true
+    if: github.event_name == 'schedule'
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      TMUX_VERSION: master
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install tmux and bats-core
@@ -57,6 +108,7 @@ jobs:
     runs-on: ubuntu-24.04
     container: alpine:3.24
     timeout-minutes: 15
+    if: github.event_name != 'pull_request'
     env:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
