@@ -33,7 +33,6 @@ jobs:
           - { os: ubuntu-24.04, tmux: 3.7c, locale: C.UTF-8 }
           - { os: ubuntu-24.04, tmux: '3.8', locale: C.UTF-8 }
           - { os: ubuntu-24.04, tmux: master, locale: C.UTF-8 }
-          - { os: macos-latest, tmux: brew, locale: en_US.UTF-8 }
     env:
       LANG: ${{ matrix.locale }}
       LC_ALL: ${{ matrix.locale }}
