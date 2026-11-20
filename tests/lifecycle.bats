@@ -224,24 +224,35 @@ settled() { eventually no_process "omp-layout.sh refresh.* .*$inner_socket"; }
 	[ -z "$output" ]
 }
 
-@test "reloading the configuration keeps one copy of each hook and leaves other hooks alone" {
-	start_session 0 1 2 3 4
-	inner set-hook -g 'client-resized[5]' 'display-message mine'
-	inner source-file "$root/omp-tmux.conf"
-	inner source-file "$root/omp-tmux.conf"
+# omp_hooks_once [OTHERS] succeeds when each omp-tmux hook is set once at index 100 and, counting
+# OTHERS extra client-resized entries, nothing else is set on it.
+omp_hooks_once() {
 	hooks=$(inner show-hooks -g)
 	hooks_expected='client-attached client-detached client-resized client-session-changed window-linked window-unlinked'
 	# tmux before 3.3 has no window hooks.
 	case $(tmux -V) in 'tmux '[0-2].* | 'tmux 3.'[0-2] | 'tmux 3.'[0-2][!0-9]*)
 		hooks_expected='client-attached client-detached client-resized client-session-changed'
-		[ "$(echo "$hooks" | grep -c '^window-')" -eq 0 ]
+		[ "$(echo "$hooks" | grep -c '^window-')" -eq 0 ] || return 1
 		;;
 	esac
 	for hook in $hooks_expected; do
-		[ "$(echo "$hooks" | grep "^$hook\[100\]" | grep -cE '@omp_(layout|refresh)')" -eq 1 ]
-		[ "$(echo "$hooks" | grep -c "^$hook\[")" -eq "$([ "$hook" = client-resized ] && echo 2 || echo 1)" ]
+		[ "$(echo "$hooks" | grep "^$hook\[100\]" | grep -cE '@omp_(layout|refresh)')" -eq 1 ] || return 1
+		[ "$(echo "$hooks" | grep -c "^$hook\[")" -eq "$([ "$hook" = client-resized ] && echo $((1 + ${1:-0})) || echo 1)" ] || return 1
 	done
-	echo "$hooks" | grep -qF 'client-resized[5] display-message mine'
+}
+
+@test "the first load of the configuration sets every hook" {
+	start_session 0 1 2 3 4
+	omp_hooks_once
+}
+
+@test "reloading the configuration keeps one copy of each hook and leaves other hooks alone" {
+	start_session 0 1 2 3 4
+	inner set-hook -g 'client-resized[5]' 'display-message mine'
+	inner source-file "$root/omp-tmux.conf"
+	inner source-file "$root/omp-tmux.conf"
+	omp_hooks_once 1
+	inner show-hooks -g | grep -qF 'client-resized[5] display-message mine'
 }
 
 @test "a persistent failure is reported once while the stale guard retries" {
