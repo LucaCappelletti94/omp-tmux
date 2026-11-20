@@ -35,20 +35,27 @@ publish() {
 	dir=$(mktemp -d "${TMPDIR:-/tmp}/omp-layout.XXXXXX")
 	trap 'rm -rf "$dir"' EXIT
 	trap 'exit 143' TERM
-	if ! {
-		max_rows=$(tm display-message -p -t "$session" '#{@omp_max_rows}') &&
-			label_width=$(tm display-message -p -t "$session" '#{@omp_label_width}') &&
-			own_status=$(tm show-options -qv -t "$session" status) &&
-			global_status=$(tm show-options -gqv status) &&
-			bar_flag=$(tm show-options -qv -t "$session" @omp_bar) &&
-			tm list-windows -t "$session" -F 'window #{window_index}' >"$dir/meta" &&
-			tm list-clients -t "$session" -F 'client #{client_width} #{client_height} #{client_control_mode}' >>"$dir/meta" &&
-			tm display-message -p -t "$session" 'key #{@omp_key}' >>"$dir/meta"
-	} 2>"$dir/error"; then
+	# A busy server answers each client in a few hundred milliseconds, so one command list reads
+	# everything. The global marker separates the session's own status from the global one.
+	if ! tm display-message -p -t "$session" 'rows #{@omp_max_rows}' \; \
+		display-message -p -t "$session" 'width #{@omp_label_width}' \; \
+		show-options -q -t "$session" status \; \
+		display-message -p global \; \
+		show-options -gq status \; \
+		show-options -q -t "$session" @omp_bar \; \
+		list-windows -t "$session" -F 'window #{window_index}' \; \
+		list-clients -t "$session" -F 'client #{client_width} #{client_height} #{client_control_mode}' \; \
+		display-message -p -t "$session" 'key #{@omp_key}' >"$dir/state" 2>"$dir/error"; then
 		tm has-session -t "$session" 2>/dev/null || exit 0
 		report "omp-tmux: layout refresh failed: $(head -n 1 "$dir/error")"
 		exit 1
 	fi
+	max_rows=$(sed -n '1s/^rows //p' "$dir/state")
+	label_width=$(sed -n '2s/^width //p' "$dir/state")
+	own_status=$(awk '$0 == "global" { exit } sub(/^status /, "")' "$dir/state")
+	global_status=$(awk 'seen && sub(/^status /, "") { print; exit } $0 == "global" { seen = 1 }' "$dir/state")
+	bar_flag=$(sed -n 's/^@omp_bar //p' "$dir/state")
+	grep -E '^(window|client|key) ' "$dir/state" >"$dir/meta" || true
 	# The session's own off is the user's and stays. A global off hides the bar unless the
 	# menu showed it, which leaves the session's own status set and @omp_bar at shown.
 	if [ "$own_status" = off ]; then
