@@ -217,6 +217,26 @@ settled() { eventually no_process "omp-layout.sh refresh.* .*$inner_socket"; }
 	[ "$(messages_with 'omp-tmux:')" -eq 0 ]
 }
 
+@test "a refresh publishes within its time limit when every tmux call is slow" {
+	start_session 0 1 2 3 4
+	attach a 80 24
+	eventually is 3 height
+	settled
+	inner set-option -u -t proof status
+	inner set-option -u -t proof status-format
+	real_tmux=$(command -v tmux)
+	mkdir "$BATS_TEST_TMPDIR/shim"
+	cat >"$BATS_TEST_TMPDIR/shim/tmux" <<-EOF
+		#!/bin/sh
+		sleep 0.4
+		exec "$real_tmux" "\$@"
+	EOF
+	chmod +x "$BATS_TEST_TMPDIR/shim/tmux"
+	PATH="$BATS_TEST_TMPDIR/shim:$PATH" "$helper" refresh "$socket" "$session_id"
+	[ "$(height)" = 3 ]
+	[ "$(messages_with 'omp-tmux:')" -eq 0 ]
+}
+
 @test "the configuration loads without errors" {
 	start_session 0
 	run inner source-file "$root/omp-tmux.conf"
