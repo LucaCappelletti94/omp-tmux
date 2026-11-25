@@ -8,10 +8,16 @@ set -eu
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 tmux_version=${TMUX_VERSION:-apt}
 base_image=${BASE_IMAGE:-ubuntu:24.04}
-image=omp-tmux-tests:$tmux_version-$(echo "$base_image" | tr ':/' '--')
-
-docker build -q -t "$image" --build-arg TMUX_VERSION="$tmux_version" --build-arg BASE_IMAGE="$base_image" \
-	-f "$root/tests/Dockerfile" "$root/.github" >/dev/null
 [ $# -gt 0 ] || set -- tests/
-exec docker run --rm --init --network none --pids-limit 1024 -v "$root:/src:ro" "$image" \
-	sh -c 'cp -r /src /w && cd /w && exec bats "$@"' sh "$@"
+stage=grid-tests
+for argument; do
+	case $argument in
+	tests/grid.bats | tests/layout.bats | tests/lifecycle.bats | tests/pickers.bats | tests/terminal.bats) ;;
+	*) stage=dock-tests ;;
+	esac
+done
+image=omp-tmux-tests:$tmux_version-$(echo "$base_image" | tr ':/' '--')-$stage
+
+docker build -q -t "$image" --target "$stage" --build-arg TMUX_VERSION="$tmux_version" --build-arg BASE_IMAGE="$base_image" \
+	-f "$root/tests/Dockerfile" "$root" >/dev/null
+exec docker run --rm --init --network none --pids-limit 1024 "$image" bats "$@"
