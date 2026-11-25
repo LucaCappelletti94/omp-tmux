@@ -223,7 +223,12 @@ impl GroupPicker {
         }
         if show_help {
             let footer = Rect::new(area.x, area.bottom() - 1, area.width, 1);
-            write_row(frame, footer, "↑↓ choose  Enter move  Esc cancel", muted);
+            write_row(
+                frame,
+                footer,
+                "F1 help  ↑↓ pick Enter move Esc cancel",
+                muted,
+            );
         }
     }
 
@@ -296,6 +301,8 @@ mod tests {
             activity: Activity::Idle,
             priority: false,
             bell: false,
+            ping: None,
+            created: None,
             current: false,
         };
         GroupPicker::new(&entry, names.iter().map(|name| (*name).into()).collect())

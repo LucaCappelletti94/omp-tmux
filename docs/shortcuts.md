@@ -4,6 +4,8 @@ From an OMP work pane, press `Shift+Tab`, type part of a title or a window numbe
 
 Keys in the dock work directly. A footer hint such as `^G` means `Ctrl+g`. For a shortcut written as `Ctrl+b` **then** another key, press and release `Ctrl+b` first. Substitute your own `tmux` prefix if you changed it.
 
+Press `?` in the dock to open the shortcut menu. `F1` also opens it while typing a search or group name. Use `↑` / `↓` to scroll one line, `Page Up` / `Page Down` to scroll a screen, and `Home` / `End` to jump. Press `Esc`, `?` or `F1` to return to the same selection and text. To search for a literal `?`, start the search with `/`.
+
 ## Find an agent and return to work
 
 | Key | What it does |
@@ -23,8 +25,12 @@ Keys in the dock work directly. A footer hint such as `^G` means `Ctrl+g`. For a
 | --- | --- |
 | `Ctrl+g` | Move the highlighted agent. Pick a saved group with `↑` / `↓`, type a new name and choose **Create**, or choose **Ungrouped** to remove it. `Enter` confirms and `Esc` cancels. |
 | `←` / `→` | Collapse or expand a group in the unfiltered group list. Search finds members even when their group is collapsed. |
-| `Ctrl+t` | Toggle triage across all groups. Urgent agents come first, then crashed agents, agents waiting for input, manual priority, unseen bells and the rest. |
+| `Ctrl+t` | Toggle triage across all groups. Sessions needing attention come first, with the newest request or unread ping at the top. Other sessions follow from newest to oldest. |
 | `Ctrl+s` | Show or hide each running agent’s current working message beneath its title. This works in either view. The option starts off and is remembered for this `tmux` session. |
+
+An unread bell, a request for input or a reply, an urgent or crashed state, or manual priority counts as needing attention. A fresh ping can bring an older session to the top without moving the keyboard selection or switching work panes. Opening the window acknowledges its bell. Any remaining request keeps it in the attention group.
+
+When the dock opens on several requests that were already pending and have no recorded time, it orders those by session age. A known OMP creation time follows the session when it resumes. For agents without one, the dock uses the window’s creation order.
 
 For example, put windows `10` and `18` in **Spectra** by assigning each agent with `Ctrl+g`. Both window numbers stay the same. Membership follows the OMP session ID if an agent resumes in a different window. An agent needs a known OMP session ID to join a group.
 

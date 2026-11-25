@@ -1,3 +1,4 @@
+mod help;
 mod roster;
 
 use std::io;
@@ -12,6 +13,7 @@ use ratatui::text::Span;
 use ratatui::widgets::{Block, BorderType, Paragraph};
 use ratatui::{DefaultTerminal, Frame};
 
+use self::help::Help;
 use self::roster::{group_label, Roster, Row};
 use crate::group_picker::{GroupPicker, PickerAction};
 use crate::tmux::{Activity, Entry, Server, Snapshot};
@@ -82,6 +84,7 @@ struct Navigator {
     snapshot: Snapshot,
     roster: Roster,
     picker: Option<GroupPicker>,
+    help: Option<Help>,
     cursor: usize,
     detail_offset: usize,
     query: String,
@@ -105,11 +108,13 @@ impl Navigator {
             .position(|entry| entry.current)
             .map(Row::Agent);
         let mut roster = Roster::default();
+        roster.observe(&snapshot.entries);
         roster.index_groups(&snapshot.entries);
         let mut navigator = Self {
             snapshot,
             roster,
             picker: None,
+            help: None,
             cursor: 0,
             detail_offset: 0,
             query: String::new(),
@@ -188,6 +193,7 @@ impl Navigator {
         }
         let previous = std::mem::replace(&mut self.snapshot, snapshot);
         if entries_changed {
+            self.roster.observe(&self.snapshot.entries);
             let retained = self
                 .selected_row()
                 .and_then(|row| row.retain(&previous.entries, &self.snapshot.entries));
@@ -295,6 +301,24 @@ impl Navigator {
     }
 
     fn key(&mut self, key: KeyEvent, server: &Server) -> Input {
+        let function_help = key.code == KeyCode::F(1) && key.modifiers.is_empty();
+        let question =
+            key.code == KeyCode::Char('?') && KeyModifiers::SHIFT.contains(key.modifiers);
+        if let Some(help) = &mut self.help {
+            if function_help || question || (key.code == KeyCode::Esc && key.modifiers.is_empty()) {
+                self.help = None;
+                return Input::Redraw;
+            }
+            return if key.modifiers.is_empty() && help.scroll(key.code) {
+                Input::Redraw
+            } else {
+                Input::Ignore
+            };
+        }
+        if function_help || (question && !self.filtering && self.picker.is_none()) {
+            self.help = Some(Help::default());
+            return Input::Redraw;
+        }
         if let Some(picker) = &mut self.picker {
             return match picker.key(key) {
                 PickerAction::Ignore => Input::Ignore,
@@ -458,6 +482,13 @@ fn navigate(
         }
         match event::read()? {
             Event::Resize(_, _) => redraw = true,
+            Event::Key(key)
+                if key.kind != KeyEventKind::Release
+                    && key.code == KeyCode::F(12)
+                    && key.modifiers.is_empty() =>
+            {
+                refresh_at = Instant::now();
+            }
             Event::Key(key) if key.kind != KeyEventKind::Release => {
                 match navigator.key(key, server) {
                     Input::Ignore => {}
@@ -643,11 +674,19 @@ impl Navigator {
             .border_type(BorderType::Rounded)
             .border_style(tone(border))
             .title(Span::styled(
-                format!(" NAVIGATOR {mode} {} {focus} ", self.roster.count),
+                if self.help.is_some() {
+                    format!(" Keyboard shortcuts  {focus} ")
+                } else {
+                    format!(" NAVIGATOR {mode} {} {focus} ", self.roster.count)
+                },
                 tone(title).add_modifier(Modifier::BOLD),
             ));
         let mut area = dock.inner(frame.area());
         frame.render_widget(dock, frame.area());
+        if let Some(help) = &mut self.help {
+            help.draw(frame, area);
+            return;
+        }
         let error = self
             .error
             .as_deref()
@@ -690,9 +729,9 @@ impl Navigator {
         }
         let heading = matches!(self.selected_row(), Some(Row::Group(_)));
         let controls = match (heading, self.query.is_empty()) {
-            (true, _) => "↑↓ Enter fold Tab view Esc work Pg↕",
-            (false, true) => "↑↓ Enter open Tab view Esc work Pg↕",
-            (false, false) => "↑↓ Enter open Tab view Esc clear Pg↕",
+            (true, _) => "Enter fold  Tab view Esc work",
+            (false, true) => "Enter open  Tab view Esc work",
+            (false, false) => "Enter open  Tab view Esc clear",
         };
         let shortcuts = if self.snapshot.status_text {
             "^G group ^T triage ^P pair ^S live on"
@@ -703,10 +742,14 @@ impl Navigator {
             Paragraph::new(shortcuts).style(tone(MUTED)),
             take_rows(&mut area, 1),
         );
-        frame.render_widget(
-            Paragraph::new(controls).style(tone(MUTED)),
-            take_rows(&mut area, 1),
-        );
+        let footer = take_rows(&mut area, 1);
+        let (hint, columns) = if self.filtering {
+            ("F1 help", 8)
+        } else {
+            ("? help", 7)
+        };
+        frame.render_widget(Span::styled(hint, bright), footer);
+        frame.render_widget(Span::styled(controls, tone(MUTED)), inset(footer, columns));
         if body.height == 0 || body.width == 0 {
             return;
         }
@@ -863,6 +906,8 @@ mod tests {
             group: String::new(),
             priority: false,
             bell: false,
+            ping: None,
+            created: None,
             current,
         }
     }
@@ -1177,41 +1222,138 @@ mod tests {
     }
 
     #[test]
-    fn triage_ranks_all_agents_and_keeps_the_selected_window_when_status_changes() {
+    fn triage_orders_attention_by_signal_then_age_and_keeps_selection_on_a_repeat_ping() {
         let server = Server::new("unused".into(), "unused".into(), "unused".into());
         let toggle = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL);
         let entries = || {
-            let mut entries: Vec<_> = (1..=7)
-                .map(|number| grouped_entry(&format!("@{number}"), "Lab", number == 1))
+            let mut entries: Vec<_> = (1..=9)
+                .map(|number| grouped_entry(&format!("@{number}"), "Lab", number == 9))
                 .collect();
+            entries[0].index = "101".into();
             entries[1].bell = true;
-            entries[2].bell = true;
-            entries[2].priority = true;
-            entries[3].activity = Activity::Waiting;
-            entries[4].activity = Activity::Crashed;
-            entries[5].activity = Activity::Urgent;
-            entries[6].activity = Activity::Waiting;
-            entries[6].priority = true;
+            entries[1].ping = Some((100, 1));
+            entries[2].activity = Activity::Urgent;
+            entries[3].activity = Activity::Crashed;
+            entries[4].activity = Activity::Waiting;
+            entries[5].priority = true;
+            entries[6].created = Some(Duration::from_secs(90));
+            entries[7].index = "99".into();
+            entries[7].created = Some(Duration::from_secs(80));
+            entries[8].index = "10".into();
             entries
         };
         let mut navigator = Navigator::new(snapshot(entries(), true));
         navigator.key(KeyCode::Left.into(), &server);
         navigator.key(toggle, &server);
-        assert!(screen(&mut navigator).contains("TRIAGE 7 Shift+Tab hide"));
-        for expected in ["@6", "@5", "@4", "@7", "@3", "@2", "@1"] {
+        assert!(screen(&mut navigator).contains("TRIAGE 9 Shift+Tab hide"));
+        for expected in ["@2", "@6", "@5", "@4", "@3", "@7", "@8", "@9", "@1"] {
             assert_eq!(navigator.selection().unwrap().window_id, expected);
             navigator.key(KeyCode::Down.into(), &server);
         }
+        navigator.key(KeyCode::Down.into(), &server);
         let mut changed = entries();
-        changed[5].activity = Activity::Idle;
+        changed[0].bell = true;
+        changed[0].ping = Some((100, 2));
         navigator.refresh(snapshot(changed, true));
         assert_eq!(navigator.selection().unwrap().window_id, "@6");
+        let mut repeated = entries();
+        repeated[0].bell = true;
+        repeated[0].ping = Some((100, 2));
+        repeated[1].ping = Some((100, 3));
+        navigator.refresh(snapshot(repeated, true));
+        assert_eq!(navigator.selection().unwrap().window_id, "@6");
+        navigator.key(KeyCode::Up.into(), &server);
+        assert_eq!(navigator.selection().unwrap().window_id, "@1");
+        navigator.key(KeyCode::Up.into(), &server);
+        assert_eq!(navigator.selection().unwrap().window_id, "@2");
         navigator.key(KeyCode::Char('5').into(), &server);
         assert_eq!(navigator.selection().unwrap().window_id, "@5");
         navigator.key(KeyCode::Esc.into(), &server);
         navigator.key(toggle, &server);
         assert!(navigator.selection().is_none());
         assert!(!screen(&mut navigator).contains("Agent @5"));
+    }
+
+    #[test]
+    fn a_newer_pending_session_precedes_an_older_recorded_ping() {
+        let server = Server::new("unused".into(), "unused".into(), "unused".into());
+        let mut pinged = grouped_entry("@1", "", true);
+        pinged.bell = true;
+        pinged.ping = Some((100, 1));
+        let mut waiting = grouped_entry("@2", "", false);
+        waiting.activity = Activity::Waiting;
+        waiting.created = Some(Duration::from_secs(200));
+        let mut idle = grouped_entry("@3", "", false);
+        idle.created = Some(Duration::from_secs(300));
+        let mut navigator = Navigator::new(snapshot(vec![pinged, waiting, idle], true));
+        navigator.key(
+            KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
+            &server,
+        );
+        for expected in ["@2", "@1", "@3"] {
+            assert_eq!(navigator.selection().unwrap().window_id, expected);
+            navigator.key(KeyCode::Down.into(), &server);
+        }
+    }
+
+    #[test]
+    fn triage_tracks_live_requests_and_only_ranks_signals_that_remain_active() {
+        let server = Server::new("unused".into(), "unused".into(), "unused".into());
+        let entries = |activity, acknowledged: bool, output: &str| {
+            let mut old = grouped_entry("@1", "Lab", false);
+            old.bell = !acknowledged;
+            old.ping = Some((100, 1));
+            old.priority = true;
+            old.status_message = output.into();
+            let mut requester = grouped_entry("@2", "Lab", false);
+            requester.activity = activity;
+            let mut pending = grouped_entry("@3", "Lab", false);
+            pending.bell = true;
+            pending.ping = Some((99, 1));
+            let mut elsewhere = grouped_entry("@4", "Field", false);
+            elsewhere.priority = true;
+            vec![old, requester, pending, elsewhere]
+        };
+        let mut navigator = Navigator::new(snapshot(entries(Activity::Idle, false, ""), true));
+        navigator.key(
+            KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
+            &server,
+        );
+        for character in "lab".chars() {
+            navigator.key(KeyCode::Char(character).into(), &server);
+        }
+        assert_eq!(navigator.selection().unwrap().window_id, "@1");
+        fn ordering(navigator: &Navigator) -> Vec<&str> {
+            navigator
+                .roster
+                .rows
+                .iter()
+                .map(|row| {
+                    row.member(&navigator.snapshot.entries)
+                        .unwrap()
+                        .window_id
+                        .as_str()
+                })
+                .collect()
+        }
+        navigator.refresh(snapshot(entries(Activity::Waiting, false, ""), true));
+        assert_eq!(ordering(&navigator), ["@2", "@1", "@3"]);
+        assert_eq!(navigator.selection().unwrap().window_id, "@1");
+        let mut pinged = entries(Activity::Waiting, false, "");
+        let seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        pinged[0].ping = Some((seconds, 2));
+        navigator.refresh(snapshot(pinged, true));
+        assert_eq!(ordering(&navigator), ["@1", "@2", "@3"]);
+        navigator.refresh(snapshot(entries(Activity::Waiting, true, "output"), true));
+        assert_eq!(ordering(&navigator), ["@2", "@3", "@1"]);
+        navigator.refresh(snapshot(
+            entries(Activity::Working, true, "more output"),
+            true,
+        ));
+        assert_eq!(ordering(&navigator), ["@3", "@1", "@2"]);
     }
 
     #[test]

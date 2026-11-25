@@ -123,6 +123,27 @@ move_agent() {
 	hides a 'Discarded'
 }
 
+@test "shortcut help preserves a partially typed group destination" {
+	group_session 3
+	title 3 'π > SAMPLE: Fraction polarity'
+	agent_identity proof:3 '11111111-1111-4111-8111-111111111113'
+	attach a 110 20
+	outer send-keys -t a BTab
+	eventually shows a 'Shift+Tab hide'
+	outer send-keys -t a C-g
+	eventually shows a 'Move to group'
+	outer send-keys -l -t a 'Spectra?'
+	eventually shows a 'Create Spectra?'
+	outer send-keys -t a F1
+	eventually shows a 'Keyboard shortcuts'
+	outer send-keys -t a Enter x F1
+	eventually shows a 'Create Spectra?'
+	hides a 'Spectra?x'
+	outer send-keys -t a Enter
+	eventually hides a 'Move to group'
+	shows a '▾ Spectra?'
+}
+
 @test "arrows wrap in both directions and triage opens the highest ranked agent" {
 	group_session 0 3 8
 	title 0 'π > BASE: Baseline scan'

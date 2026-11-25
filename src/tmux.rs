@@ -1,5 +1,5 @@
-use crate::groups::GroupStore;
-use std::{ffi::OsString, io, process::Command};
+use crate::{groups::GroupStore, identity::Session};
+use std::{ffi::OsString, io, process::Command, time::Duration};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Activity {
@@ -28,6 +28,8 @@ pub(crate) struct Entry {
     pub activity: Activity,
     pub priority: bool,
     pub bell: bool,
+    pub ping: Option<(u64, u64)>,
+    pub created: Option<Duration>,
     pub current: bool,
 }
 
@@ -56,7 +58,8 @@ const PANE_FORMAT: &str = concat!(
     "#{s/[\x01-\x1f\x7f]/ /:pane_current_path}\t#{@omp_state}\t#{@omp_priority}\t#{window_bell_flag}\t",
     "#{@omp_dock_slot}\t#{&&:#{@omp_dock_reserved},",
     "#{&&:#{==:#{window_linked},0},#{&&:#{==:#{window_zoomed_flag},0},#{e|>=:#{window_width},76}}}}\t",
-    "#{pane_tty}\t#{pane_dead}\t#{?#{e|>:#{pane_height},32},#{e|-:#{pane_height},32},0}\t#{session_name}"
+    "#{pane_tty}\t#{pane_dead}\t#{?#{e|>:#{pane_height},32},#{e|-:#{pane_height},32},0}\t#{session_name}\t",
+    "#{@omp_dock_ping}\t#{@omp_dock_created}"
 );
 
 impl Server {
@@ -85,7 +88,7 @@ impl Server {
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
     }
 
-    fn session_identity(&self, work: &Pane<'_>) -> (String, String, String) {
+    fn session_identity(&self, work: &Pane<'_>) -> Session {
         self.identities
             .as_ref()
             .filter(|_| !work.dead && work.state != "crashed")
@@ -120,7 +123,7 @@ impl Server {
                 && !pane.dock
                 && !session_id.is_empty()
                 && pane.agent().is_some()
-                && self.session_identity(&pane).0 == session_id
+                && self.session_identity(&pane).id == session_id
         });
         if !same_agent {
             return Err(io::Error::other(
@@ -208,11 +211,11 @@ impl Server {
                 continue;
             };
             let (title, description) = label.split_once(": ").unwrap_or((label, ""));
-            let (session_id, session_code, session_tag) = self.session_identity(&work);
-            let group = if session_id.is_empty() {
+            let session = self.session_identity(&work);
+            let group = if session.id.is_empty() {
                 String::new()
             } else {
-                match self.groups.lookup(&session_id) {
+                match self.groups.lookup(&session.id) {
                     Ok(name) => name.unwrap_or_default(),
                     Err(error) => {
                         group_error.get_or_insert_with(|| {
@@ -229,9 +232,9 @@ impl Server {
                 window_id: work.window_id.to_owned(),
                 index: work.index.to_owned(),
                 pane_id: work.pane_id.to_owned(),
-                session_id,
-                session_code,
-                session_tag,
+                session_id: session.id,
+                session_code: session.code,
+                session_tag: session.tag,
                 group,
                 title: title.to_owned(),
                 description: description.to_owned(),
@@ -240,6 +243,10 @@ impl Server {
                 activity,
                 priority: work.priority,
                 bell: work.bell,
+                ping: parse_ping(work.ping),
+                created: session
+                    .created
+                    .or_else(|| work.created.parse().ok().map(Duration::from_secs)),
                 current: work.current,
             });
         }
@@ -400,6 +407,8 @@ struct Pane<'a> {
     dead: bool,
     session_name: &'a str,
     capture_start: &'a str,
+    ping: &'a str,
+    created: &'a str,
 }
 
 fn parse_pane(record: &str) -> Option<Pane<'_>> {
@@ -424,7 +433,15 @@ fn parse_pane(record: &str) -> Option<Pane<'_>> {
         dead: fields.next()? == "1",
         capture_start: fields.next()?,
         session_name: fields.next()?,
+        ping: fields.next().unwrap_or_default(),
+        created: fields.next().unwrap_or_default(),
     })
+}
+
+fn parse_ping(stamp: &str) -> Option<(u64, u64)> {
+    let (seconds, serial) = stamp.split_once('.')?;
+    let serial = serial.parse().ok()?;
+    (serial != 0).then_some((seconds.parse().ok()?, serial))
 }
 
 impl<'a> Pane<'a> {
@@ -454,5 +471,24 @@ impl<'a> Pane<'a> {
 
     fn crashed(&self) -> Option<(Activity, &'a str)> {
         (self.state == "crashed").then_some((Activity::Crashed, self.window_name))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pane_without_native_timestamps_remains_an_agent() {
+        let record =
+            "@4\t1\t0\t%8\t1\t0\t0\tπ > Build\tbuild\t/tmp\t\t\t0\t\t0\t/dev/pts/8\t0\t0\twork";
+        let pane = parse_pane(record).unwrap();
+        assert_eq!(pane.agent(), Some((Activity::Idle, "Build")));
+        assert_eq!(parse_ping(pane.ping), None);
+        assert!(pane.created.is_empty());
+        let native = format!("{record}\t101.3\t80");
+        let pane = parse_pane(&native).unwrap();
+        assert_eq!(parse_ping(pane.ping), Some((101, 3)));
+        assert_eq!(pane.created, "80");
     }
 }

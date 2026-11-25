@@ -5,11 +5,20 @@ use std::{
     io::{self, BufRead, BufReader, Read},
     os::unix::fs::{FileTypeExt, MetadataExt},
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 pub(crate) struct Paths {
     breadcrumbs: PathBuf,
     notifications: PathBuf,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct Session {
+    pub id: String,
+    pub code: String,
+    pub tag: String,
+    pub created: Option<Duration>,
 }
 
 impl Paths {
@@ -71,7 +80,7 @@ impl Paths {
         session: &str,
         index: &str,
         pane: &str,
-    ) -> Option<(String, String, String)> {
+    ) -> Option<Session> {
         let key = terminal.strip_prefix("/dev/")?;
         if key.split('/').any(|part| matches!(part, "" | "." | "..")) {
             return None;
@@ -88,11 +97,14 @@ impl Paths {
         }
         let mut text = String::new();
         crumb.read_to_string(&mut text).ok()?;
-        let identity = breadcrumb_identity(&text, directory)?;
-        let (code, tag) = self
-            .badge(&identity, session, index, pane)
-            .unwrap_or_default();
-        Some((identity, code, tag))
+        let (id, created) = breadcrumb_identity(&text, directory)?;
+        let (code, tag) = self.badge(&id, session, index, pane).unwrap_or_default();
+        Some(Session {
+            id,
+            code,
+            tag,
+            created,
+        })
     }
 
     fn badge(
@@ -157,14 +169,20 @@ pub(crate) fn valid_uuid(value: &str) -> bool {
         })
 }
 
-fn managed_identity(path: &Path) -> Option<&str> {
+fn managed_identity(path: &Path) -> Option<(&str, Option<Duration>)> {
     let (stamp, identity) = path
         .file_name()?
         .to_str()?
         .strip_suffix(".jsonl")?
         .rsplit_once('_')?;
-    let pattern = b"0000-00-00T00-00-00-000Z";
-    (stamp.len() == pattern.len()
+    if !valid_uuid(identity) || !stamp_matches(stamp, b"0000-00-00T00-00-00-000Z") {
+        return None;
+    }
+    Some((identity, utc_birth(stamp)))
+}
+
+fn stamp_matches(stamp: &str, pattern: &[u8]) -> bool {
+    stamp.len() == pattern.len()
         && stamp.bytes().zip(pattern).all(|(byte, &expected)| {
             if expected == b'0' {
                 byte.is_ascii_digit()
@@ -172,11 +190,57 @@ fn managed_identity(path: &Path) -> Option<&str> {
                 byte == expected
             }
         })
-        && valid_uuid(identity))
-    .then_some(identity)
 }
 
-fn breadcrumb_identity(text: &str, current: &Path) -> Option<String> {
+/// Parses the fields shared by the checked UTC filename and header formats.
+fn utc_birth(stamp: &str) -> Option<Duration> {
+    let year: u64 = stamp[0..4].parse().ok()?;
+    let month: usize = stamp[5..7].parse().ok()?;
+    let day: u64 = stamp[8..10].parse().ok()?;
+    let hour: u64 = stamp[11..13].parse().ok()?;
+    let minute: u64 = stamp[14..16].parse().ok()?;
+    let second: u64 = stamp[17..19].parse().ok()?;
+    let millis = if stamp.len() == 24 {
+        stamp[20..23].parse().ok()?
+    } else {
+        0
+    };
+    let leap = year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
+    let months = [
+        31,
+        28 + u64::from(leap),
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    if year < 1970
+        || !(1..=12).contains(&month)
+        || !(1..=months[month - 1]).contains(&day)
+        || hour >= 24
+        || minute >= 60
+        || second >= 60
+    {
+        return None;
+    }
+    let leaps_through = |year: u64| year / 4 - year / 100 + year / 400;
+    let days = (year - 1970) * 365 + leaps_through(year - 1) - leaps_through(1969)
+        + months[..month - 1].iter().sum::<u64>()
+        + day
+        - 1;
+    Some(Duration::new(
+        days * 86_400 + hour * 3600 + minute * 60 + second,
+        millis * 1_000_000,
+    ))
+}
+
+fn breadcrumb_identity(text: &str, current: &Path) -> Option<(String, Option<Duration>)> {
     let mut lines = text.lines();
     let recorded = Path::new(lines.next()?);
     let target = lines.next()?;
@@ -210,12 +274,18 @@ fn breadcrumb_identity(text: &str, current: &Path) -> Option<String> {
     match fs::metadata(&path) {
         Ok(stat) if stat.is_file() => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound && fresh => {
-            return managed_identity(&path).map(str::to_owned)
+            return managed_identity(&path).map(|(id, created)| (id.to_owned(), created))
         }
         _ => return None,
     }
-    if let Some(identity) = managed_identity(&path) {
-        return Some(identity.to_owned());
+    if let Some((id, created)) = managed_identity(&path) {
+        return Some((id.to_owned(), created));
+    }
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Timestamp<'a> {
+        Text(&'a str),
+        Other(serde::de::IgnoredAny),
     }
     #[derive(Deserialize)]
     struct Header<'a> {
@@ -225,6 +295,8 @@ fn breadcrumb_identity(text: &str, current: &Path) -> Option<String> {
         id: &'a str,
         #[serde(borrow, default)]
         cwd: Cow<'a, str>,
+        #[serde(borrow, default)]
+        timestamp: Option<Timestamp<'a>>,
     }
     let mut input = BufReader::new(fs::File::open(path).ok()?).take(64 * 1024);
     let mut line = Vec::new();
@@ -241,7 +313,18 @@ fn breadcrumb_identity(text: &str, current: &Path) -> Option<String> {
         return (header.kind == "session"
             && Path::new(header.cwd.as_ref()) == recorded
             && valid_uuid(header.id))
-        .then(|| header.id.to_owned());
+        .then(|| {
+            let created = match header.timestamp {
+                Some(Timestamp::Text(stamp))
+                    if stamp_matches(stamp, b"0000-00-00T00:00:00.000Z")
+                        || stamp_matches(stamp, b"0000-00-00T00:00:00Z") =>
+                {
+                    utc_birth(stamp)
+                }
+                _ => None,
+            };
+            (header.id.to_owned(), created)
+        });
     }
     None
 }
@@ -262,6 +345,13 @@ mod tests {
         };
         fs::create_dir(&paths.breadcrumbs).unwrap();
         let lookup = || paths.lookup("/dev/null", &directory, "work", "7", "%13");
+        let session = |code: &str, tag: &str, created| Session {
+            id: SESSION.into(),
+            code: code.into(),
+            tag: tag.into(),
+            created,
+        };
+        let birth = Some(Duration::from_millis(1_772_637_377_123));
         assert_eq!(lookup(), None);
         let crumb = paths.breadcrumbs.join("null");
         let target = format!("2026-03-04T15-16-17-123Z_{SESSION}.jsonl");
@@ -277,10 +367,7 @@ mod tests {
         write(&directory, "bad-name.jsonl", "fresh\n");
         assert_eq!(lookup(), None);
         write(&directory, &target, "fresh\n");
-        assert_eq!(
-            lookup(),
-            Some((SESSION.into(), String::new(), String::new()))
-        );
+        assert_eq!(lookup(), Some(session("", "", birth)));
         fs::File::open(&crumb)
             .unwrap()
             .set_modified(std::time::SystemTime::UNIX_EPOCH)
@@ -312,7 +399,7 @@ mod tests {
             ),
         ] {
             fs::write(&record, body).unwrap();
-            assert_eq!(lookup(), Some((SESSION.into(), code.into(), tag.into())));
+            assert_eq!(lookup(), Some(session(code, tag, birth)));
         }
         write(&directory, "custom.jsonl", "");
         let header = format!(
@@ -321,11 +408,17 @@ mod tests {
         );
         for title in ["", "{\"type\":\"title\",\"v\":1,\"title\":\"Study\"}\n"] {
             fs::write(directory.join("custom.jsonl"), format!("{title}{header}")).unwrap();
-            assert_eq!(
-                lookup(),
-                Some((SESSION.into(), "BUILD".into(), "j3l6e".into()))
-            );
+            assert_eq!(lookup(), Some(session("BUILD", "j3l6e", None)));
         }
+        fs::write(
+            directory.join("custom.jsonl"),
+            header.replace(
+                "\"cwd\"",
+                "\"timestamp\":\"2026-03-04T15:16:17.123Z\",\"cwd\"",
+            ),
+        )
+        .unwrap();
+        assert_eq!(lookup(), Some(session("BUILD", "j3l6e", birth)));
         fs::remove_dir_all(directory).unwrap();
     }
 }

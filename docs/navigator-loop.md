@@ -5,6 +5,7 @@ The first local snapshot starts a full draw. A visible spinner is a `Working` si
 | Event or job | No visible spinner | Visible spinner |
 | --- | --- | --- |
 | Metadata due, every two seconds | Read one snapshot | Read one snapshot even if animation is due |
+| The `alert-bell` hook wakes this renderer with `F12` | Read a snapshot immediately, even under a modal | Same |
 | Animation due | No deadline | Draw the current 100 ms frame of the ten-frame cycle. Skip missed frames |
 | Wait for input | Until metadata is due | Until the earlier deadline |
 | Search starts, changes or clears | Redraw the filtered view | Same |
@@ -16,11 +17,12 @@ The first local snapshot starts a full draw. A visible spinner is a `Working` si
 | `Shift+Tab` | `tmux` focuses the dock from work or hides the focused dock. The header shows the available action | Same |
 | Snapshot or terminal I/O fails | Return the error and restore the terminal if initialized | Same |
 
-The first interior row always shows the search field. An empty field hints at keyword or session ID search. The remaining rows hold results and controls as space permits. The dock receives typing only when focused. A focus change retains the query and editing state. The hardware cursor appears only while editing in the focused dock.
+The first interior row of the roster shows the search field. An empty field hints at keyword or session ID search. The remaining rows hold results and controls as space permits. The dock receives typing only when focused. A focus change retains the query and editing state. The hardware cursor appears only while editing in the focused dock.
 
 | Input | Idle field | Editing an empty field | Editing a nonempty field |
 | --- | --- | --- | --- |
 | `/` | Start editing | Append `/` | Append `/` |
+| `?` | Open shortcut help | Append `?` | Append `?` |
 | Other printable character without `Alt` or `Ctrl` | Start editing and append | Append | Append |
 | `Backspace` | Ignore | Keep editing | Remove the last character |
 | `Esc` | Return to work | Return to work | Clear the query and leave editing |
@@ -28,6 +30,22 @@ The first interior row always shows the search field. An empty field hints at ke
 | `Ctrl+b` then a window digit, or `Ctrl+b` then `'` | `tmux` handles window selection | Same | Same |
 
 Matches are literal case-insensitive substrings of the group name, window number, title, description, directory, OMP session ID, notification tag or badge code. Typing an exact window number selects its entry among the matches. The session ID comes from [OMP’s terminal breadcrumb](https://github.com/can1357/oh-my-pi/blob/v19.1.1/docs/session.md#on-disk-layout) for the work pane. Looking up that ID’s optional notification record requires no scan of other sessions.
+
+## Shortcut help
+
+Help occupies the existing dock. It opens at the first shortcut and keeps the underlying selection, search text, group destination and description scroll position.
+
+| Event or job | Roster | Editing search or a group destination | Help |
+| --- | --- | --- | --- |
+| `F1` | Open help | Open help | Return to the underlying view |
+| `?` | Open help | Enter a literal question mark | Return to the underlying view |
+| `Esc` | Use the current view’s binding | Use the field’s binding | Return without forwarding the key |
+| `↑` / `↓`, `Page Up` / `Page Down`, `Home` / `End` | Use the roster bindings | Use the field’s bindings | Scroll one line, one screen or to either end. Stop at the first and last page |
+| Other typing, `Enter` and dock commands | Use the roster bindings | Use the field’s bindings | Ignore. No command reaches the underlying view or a work pane |
+| Resize or focus change | Recompute the viewport | Recompute the viewport and cursor | Wrap to the available width and clamp the scroll position. Hide the editing cursor |
+| Metadata or bell update | Refresh the roster | Refresh and revalidate a pending move | Update the underlying view by the same rules. Keep help open at its scroll position |
+| Animation | Paint visible working glyphs | Paint only visible working glyphs | Suspend spinner painting |
+| `Shift+Tab`, prefix keys or dock removal | Use the native bindings and dock lifecycle | Same | Same. Closing the dock discards the open guide |
 
 ## Group navigation
 
@@ -53,7 +71,18 @@ Each identified OMP session belongs to at most one named group. Unassigned agent
 
 Membership lives under `$XDG_STATE_HOME/omp-tmux/groups`, with `~/.local/state/omp-tmux/groups` as the default. One file per OMP UUID lets different docks update unrelated sessions independently. Assignment replaces that UUID’s file atomically. Choosing **Ungrouped** removes it. No window or pane is moved, renamed or resized. A group is available while at least one saved membership uses its name, including sessions currently closed. The destination list reads those names when opened. Agent refreshes look up only the local roster. Group names are trimmed, case-sensitive text of up to 64 characters, excluding control characters and the reserved name **Ungrouped**.
 
-Triage includes every eligible agent, even members of collapsed groups. Urgent agents appear first, followed by crashes, agents waiting for input or a reply, manually marked priority, unseen bells, and the remaining agents. A window takes its highest applicable rank. Ties retain `tmux` window order. Search and circular navigation work on the ranked list. A status refresh updates the order while retaining the selected window when present. Leaving triage restores the group headings and their collapse choices. Triage changes no agent state.
+Triage has two groups. Sessions requiring attention come first. An unread bell, a request for input or a reply, an urgent or crashed state, or manual priority all qualify. Within that group the most recent request or unread ping comes first, regardless of its kind. Other sessions follow from newest to oldest. Search applies the same order to its matches, including members of collapsed groups. Leaving triage restores the group headings and collapse choices.
+
+The bell hook records each unread ping with a timestamp and a serial so repeated bells in one second stay ordered. When a request is already pending and its time is unknown, use session creation as its earliest possible time. For creation, prefer the OMP session timestamp, then the recorded `tmux` window creation time. Within each group, undated entries follow dated entries in descending numeric `tmux` window ID order. Renumbering a window does not change its age.
+
+| Event or job | Grouped or ordinary roster | Triage, including filtered results | Group picker or help | Dock closed |
+| --- | --- | --- | --- | --- |
+| An inactive window rings, including another bell from an already flagged window | Record the bell and refresh the local roster | Move the matching session to the top immediately. Keep keyboard selection and work focus | Update the underlying roster without dismissing the view | Retain bell order in `tmux` for the next open |
+| A session enters an attention state without a bell | Refresh the visible state on the metadata update | Rank the request with the other attention signals by recency | Update the underlying roster | Open using the available session and signal metadata |
+| A bell is acknowledged or the attention state clears | Update the flags | Remove the cleared signal. Keep the session in the first group only if another signal still needs attention | Same for the underlying roster | Use the live flags on the next open |
+| Typing, ordinary pane output, animation or a window renumber | Use normal roster order | Keep the attention order and session ages | Keep the current interaction | Do not invent a new signal |
+| A session opens, disappears or the active window changes | Use the group navigation rules | Rebuild the two groups. Preserve an existing selection unless the user has switched windows | Revalidate a pending move | No renderer to wake |
+| A bell belongs to a different session or a non-agent window | Exclude it from this roster | No unrelated entry is promoted | No change to the interaction | Do not open or focus a dock |
 
 ## Live working messages
 
