@@ -4,6 +4,7 @@ use std::time::{Duration, SystemTime};
 
 use super::{matches, Activity, Entry};
 use crate::groups::UNGROUPED;
+use crate::tmux::DockView;
 
 pub(super) fn group_label(name: &str) -> &str {
     if name.is_empty() {
@@ -85,7 +86,6 @@ struct TriageKey {
 pub(super) struct Roster {
     pub(super) rows: Vec<Row>,
     pub(super) count: usize,
-    pub(super) triage: bool,
     grouped_order: Vec<usize>,
     collapsed: BTreeSet<String>,
     windows: HashMap<u32, WindowSignals>,
@@ -117,10 +117,10 @@ impl Roster {
                 .unwrap_or(0);
             let signals = self.windows.entry(window).or_default();
             let noticed = observed.filter(|_| signals.generation != 0);
-            let request = match entry.activity {
-                Activity::Waiting | Activity::Crashed | Activity::Urgent => Some(entry.activity),
-                _ => None,
-            };
+            let request = entry
+                .activity
+                .requests_attention()
+                .then_some(entry.activity);
             let request_time = signals.request.update(request, noticed);
             let priority_time = signals.priority.update(entry.priority, noticed);
             let observed_bell = signals.bell.update(entry.bell, noticed);
@@ -131,7 +131,7 @@ impl Roster {
             signals.generation = self.generation;
             self.latest_ping = self.latest_ping.max(entry.ping);
             self.keys.push(TriageKey {
-                attention: request.is_some() || entry.priority || entry.bell,
+                attention: entry.requires_attention(),
                 recency: request_time
                     .max(priority_time)
                     .max(bell_time)
@@ -155,8 +155,12 @@ impl Roster {
         }
     }
 
-    pub(super) fn grouped(&self, query: &str) -> bool {
-        !self.triage && query.is_empty() && !self.grouped_order.is_empty()
+    pub(super) fn grouped(&self, query: &str, view: &DockView) -> bool {
+        !view.triage
+            && view.group.is_none()
+            && !view.attention_only
+            && query.is_empty()
+            && !self.grouped_order.is_empty()
     }
 
     pub(super) fn is_collapsed(&self, name: &str) -> bool {
@@ -174,9 +178,9 @@ impl Roster {
         self.collapsed.insert(name.to_owned())
     }
 
-    pub(super) fn project(&mut self, entries: &[Entry], query: &str) {
+    pub(super) fn project(&mut self, entries: &[Entry], query: &str, view: &DockView) {
         self.rows.clear();
-        if self.grouped(query) {
+        if self.grouped(query, view) {
             for group in self
                 .grouped_order
                 .chunk_by(|&left, &right| entries[left].group == entries[right].group)
@@ -190,12 +194,11 @@ impl Roster {
             self.count = entries.len();
         } else {
             let needle = query.to_lowercase();
-            self.rows.extend(
-                entries.iter().enumerate().filter_map(|(index, entry)| {
-                    matches(entry, &needle).then_some(Row::Agent(index))
-                }),
-            );
-            if self.triage {
+            self.rows
+                .extend(entries.iter().enumerate().filter_map(|(index, entry)| {
+                    (view.includes(entry) && matches(entry, &needle)).then_some(Row::Agent(index))
+                }));
+            if view.triage {
                 self.rows.sort_unstable_by_key(|&row| {
                     let Row::Agent(index) = row else {
                         unreachable!("triage contains only agents")

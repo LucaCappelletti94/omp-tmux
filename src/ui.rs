@@ -16,7 +16,7 @@ use ratatui::{DefaultTerminal, Frame};
 use self::help::Help;
 use self::roster::{group_label, Roster, Row};
 use crate::group_picker::{GroupPicker, PickerAction};
-use crate::tmux::{Activity, Entry, Server, Snapshot};
+use crate::tmux::{Activity, Entry, Server, Snapshot, ViewSetting};
 
 const REFRESH: Duration = Duration::from_secs(2);
 
@@ -97,16 +97,21 @@ enum Input {
     Ignore,
     Redraw,
     Refresh,
+    SaveView(ViewSetting),
     Assign(Option<String>),
 }
 
 impl Navigator {
     fn new(snapshot: Snapshot) -> Self {
-        let current = snapshot
-            .entries
-            .iter()
-            .position(|entry| entry.current)
-            .map(Row::Agent);
+        let current = if snapshot.view.triage {
+            None
+        } else {
+            snapshot
+                .entries
+                .iter()
+                .position(|entry| entry.current)
+                .map(Row::Agent)
+        };
         let mut roster = Roster::default();
         roster.observe(&snapshot.entries);
         roster.index_groups(&snapshot.entries);
@@ -135,17 +140,21 @@ impl Navigator {
     }
 
     fn rebuild(&mut self, preferred: Option<Row>) {
-        self.roster.project(&self.snapshot.entries, &self.query);
+        self.roster
+            .project(&self.snapshot.entries, &self.query, &self.snapshot.view);
         self.cursor = preferred
             .and_then(|row| self.roster.position(row, &self.snapshot.entries))
             .unwrap_or_else(|| self.cursor.min(self.roster.rows.len().saturating_sub(1)));
     }
 
-    fn filter(&mut self) {
-        let preferred = self.selected_row();
+    fn reset_projection(&mut self, preferred: Option<Row>) {
         self.cursor = 0;
         self.detail_offset = 0;
         self.rebuild(preferred);
+    }
+
+    fn filter(&mut self) {
+        self.reset_projection(self.selected_row());
         if self
             .query
             .starts_with(|character: char| character.is_ascii_digit())
@@ -162,7 +171,9 @@ impl Navigator {
     fn refresh(&mut self, snapshot: Snapshot) -> bool {
         let switched = self.snapshot.active_window != snapshot.active_window;
         let entries_changed = self.snapshot.entries != snapshot.entries;
+        let view_changed = self.snapshot.view != snapshot.view;
         if !entries_changed
+            && !view_changed
             && !switched
             && self.snapshot.focused == snapshot.focused
             && self.snapshot.status_text == snapshot.status_text
@@ -192,11 +203,14 @@ impl Navigator {
             }
         }
         let previous = std::mem::replace(&mut self.snapshot, snapshot);
+        let retained = if entries_changed {
+            self.selected_row()
+                .and_then(|row| row.retain(&previous.entries, &self.snapshot.entries))
+        } else {
+            self.selected_row()
+        };
         if entries_changed {
             self.roster.observe(&self.snapshot.entries);
-            let retained = self
-                .selected_row()
-                .and_then(|row| row.retain(&previous.entries, &self.snapshot.entries));
             if !previous.entries.iter().map(|entry| &entry.group).eq(self
                 .snapshot
                 .entries
@@ -205,7 +219,14 @@ impl Navigator {
             {
                 self.roster.index_groups(&self.snapshot.entries);
             }
-            self.rebuild(retained);
+        }
+        if entries_changed || view_changed {
+            if view_changed {
+                let entering_triage = self.snapshot.view.triage && !previous.view.triage;
+                self.reset_projection(if entering_triage { None } else { retained });
+            } else {
+                self.rebuild(retained);
+            }
             if switched {
                 if let Some(position) = self
                     .snapshot
@@ -280,7 +301,9 @@ impl Navigator {
         };
         let switched = self.snapshot.active_window != snapshot.active_window;
         self.refresh(snapshot);
-        if self.roster.expand(name.unwrap_or_default()) && self.roster.grouped(&self.query) {
+        if self.roster.expand(name.unwrap_or_default())
+            && self.roster.grouped(&self.query, &self.snapshot.view)
+        {
             self.rebuild(self.selected_row());
         }
         if !switched {
@@ -298,6 +321,33 @@ impl Navigator {
             }
         }
         Ok(true)
+    }
+
+    fn change_view(&mut self, setting: ViewSetting) -> Input {
+        let mut preferred = self.selected_row();
+        let view = &mut self.snapshot.view;
+        match setting {
+            ViewSetting::Triage => {
+                view.triage = !view.triage;
+                if view.triage {
+                    preferred = None;
+                }
+            }
+            ViewSetting::Group => {
+                view.group = if view.group.is_some() {
+                    None
+                } else {
+                    let Some(row) = preferred else {
+                        return Input::Ignore;
+                    };
+                    Some(row.group(&self.snapshot.entries).to_owned())
+                };
+            }
+            ViewSetting::AttentionOnly => view.attention_only = !view.attention_only,
+        }
+        self.reset_projection(preferred);
+        self.error = None;
+        Input::SaveView(setting)
     }
 
     fn key(&mut self, key: KeyEvent, server: &Server) -> Input {
@@ -365,23 +415,20 @@ impl Navigator {
             }
             return Input::Redraw;
         }
-        if control_key(key, 't') {
-            self.roster.triage = !self.roster.triage;
-            let preferred = if self.roster.triage {
-                None
-            } else {
-                self.selected_row()
-            };
-            self.cursor = 0;
-            self.detail_offset = 0;
-            self.rebuild(preferred);
-            self.error = None;
-            return Input::Redraw;
+        if key.modifiers == KeyModifiers::CONTROL {
+            match key.code {
+                KeyCode::Char('t') => return self.change_view(ViewSetting::Triage),
+                KeyCode::Char('f') => return self.change_view(ViewSetting::Group),
+                KeyCode::Char('a') => return self.change_view(ViewSetting::AttentionOnly),
+                _ => {}
+            }
         }
         match key.code {
             KeyCode::Up => self.move_by(-1),
             KeyCode::Down => self.move_by(1),
-            KeyCode::Left | KeyCode::Right if self.roster.grouped(&self.query) => {
+            KeyCode::Left | KeyCode::Right
+                if self.roster.grouped(&self.query, &self.snapshot.view) =>
+            {
                 let Some(row) = self.selected_row() else {
                     return Input::Ignore;
                 };
@@ -495,6 +542,19 @@ fn navigate(
                     Input::Redraw => redraw = true,
                     Input::Refresh => {
                         refresh_at = Instant::now();
+                        redraw = true;
+                    }
+                    Input::SaveView(setting) => {
+                        if let Err(error) =
+                            server.save_view_setting(&navigator.snapshot.view, setting)
+                        {
+                            navigator.error = Some(format!("Could not save dock view ({error})"));
+                            refresh_at = Instant::now();
+                        } else if navigator.snapshot.status_text
+                            && !matches!(setting, ViewSetting::Triage)
+                        {
+                            refresh_at = Instant::now();
+                        }
                         redraw = true;
                     }
                     Input::Assign(name) => {
@@ -658,7 +718,8 @@ impl Navigator {
         spinners.cells.clear();
         spinners.cursor = None;
         let bright = tone(ACCENT).add_modifier(Modifier::BOLD);
-        let mode = if self.roster.triage {
+        let view = &self.snapshot.view;
+        let mode = if view.triage {
             "TRIAGE"
         } else if self.compact {
             "COMPACT"
@@ -670,7 +731,7 @@ impl Navigator {
         } else {
             ("Shift+Tab focus", Color::DarkGray, MUTED)
         };
-        let dock = Block::bordered()
+        let mut dock = Block::bordered()
             .border_type(BorderType::Rounded)
             .border_style(tone(border))
             .title(Span::styled(
@@ -681,6 +742,20 @@ impl Navigator {
                 },
                 tone(title).add_modifier(Modifier::BOLD),
             ));
+        if self.help.is_none() && self.picker.is_none() {
+            let hint = tone(MUTED);
+            dock = dock
+                .title_bottom(if view.attention_only {
+                    Span::styled(" ^A Attention only ", bright)
+                } else {
+                    Span::styled(" ^A filter alerts ", hint)
+                })
+                .title_bottom(if let Some(group) = &view.group {
+                    Span::styled(format!(" ^F {} ", group_label(group)), bright)
+                } else {
+                    Span::styled(" ^F focus group ", hint)
+                });
+        }
         let mut area = dock.inner(frame.area());
         frame.render_widget(dock, frame.area());
         if let Some(help) = &mut self.help {
@@ -754,15 +829,19 @@ impl Navigator {
             return;
         }
         let Some(selected) = self.selected_row() else {
-            let message = if self.snapshot.entries.is_empty() {
-                " No OMP windows"
-            } else {
+            let message = if !self.query.is_empty() {
                 " No matches"
+            } else if view.attention_only {
+                " No sessions need attention"
+            } else if view.group.is_some() {
+                " No sessions in this group"
+            } else {
+                " No OMP windows"
             };
             frame.render_widget(Paragraph::new(message).style(bright), body);
             return;
         };
-        let indent = if self.roster.grouped(&self.query) {
+        let indent = if self.roster.grouped(&self.query, view) {
             2
         } else {
             0
@@ -921,8 +1000,15 @@ mod tests {
             entries,
             focused,
             status_text: false,
+            view: Default::default(),
             group_error: None,
         }
+    }
+
+    fn triage_snapshot(entries: Vec<Entry>) -> Snapshot {
+        let mut sample = snapshot(entries, true);
+        sample.view.triage = true;
+        sample
     }
 
     fn grouped_entry(window: &str, group: &str, current: bool) -> Entry {
@@ -1254,13 +1340,13 @@ mod tests {
         let mut changed = entries();
         changed[0].bell = true;
         changed[0].ping = Some((100, 2));
-        navigator.refresh(snapshot(changed, true));
+        navigator.refresh(triage_snapshot(changed));
         assert_eq!(navigator.selection().unwrap().window_id, "@6");
         let mut repeated = entries();
         repeated[0].bell = true;
         repeated[0].ping = Some((100, 2));
         repeated[1].ping = Some((100, 3));
-        navigator.refresh(snapshot(repeated, true));
+        navigator.refresh(triage_snapshot(repeated));
         assert_eq!(navigator.selection().unwrap().window_id, "@6");
         navigator.key(KeyCode::Up.into(), &server);
         assert_eq!(navigator.selection().unwrap().window_id, "@1");
@@ -1314,11 +1400,7 @@ mod tests {
             elsewhere.priority = true;
             vec![old, requester, pending, elsewhere]
         };
-        let mut navigator = Navigator::new(snapshot(entries(Activity::Idle, false, ""), true));
-        navigator.key(
-            KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
-            &server,
-        );
+        let mut navigator = Navigator::new(triage_snapshot(entries(Activity::Idle, false, "")));
         for character in "lab".chars() {
             navigator.key(KeyCode::Char(character).into(), &server);
         }
@@ -1336,7 +1418,7 @@ mod tests {
                 })
                 .collect()
         }
-        navigator.refresh(snapshot(entries(Activity::Waiting, false, ""), true));
+        navigator.refresh(triage_snapshot(entries(Activity::Waiting, false, "")));
         assert_eq!(ordering(&navigator), ["@2", "@1", "@3"]);
         assert_eq!(navigator.selection().unwrap().window_id, "@1");
         let mut pinged = entries(Activity::Waiting, false, "");
@@ -1345,14 +1427,15 @@ mod tests {
             .unwrap()
             .as_secs();
         pinged[0].ping = Some((seconds, 2));
-        navigator.refresh(snapshot(pinged, true));
+        navigator.refresh(triage_snapshot(pinged));
         assert_eq!(ordering(&navigator), ["@1", "@2", "@3"]);
-        navigator.refresh(snapshot(entries(Activity::Waiting, true, "output"), true));
+        navigator.refresh(triage_snapshot(entries(Activity::Waiting, true, "output")));
         assert_eq!(ordering(&navigator), ["@2", "@3", "@1"]);
-        navigator.refresh(snapshot(
-            entries(Activity::Working, true, "more output"),
+        navigator.refresh(triage_snapshot(entries(
+            Activity::Working,
             true,
-        ));
+            "more output",
+        )));
         assert_eq!(ordering(&navigator), ["@3", "@1", "@2"]);
     }
 

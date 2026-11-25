@@ -24,6 +24,8 @@ const SECTIONS: &[(&str, &[&str])] = &[
         "Groups and attention",
         &[
             "← / →       Collapse / expand group",
+            "Ctrl+f      Focus / leave this group",
+            "Ctrl+a      Toggle attention-only view",
             "Ctrl+g      Move agent to a group",
             "Type        Find or create a group",
             "↑ / ↓       Choose a destination",

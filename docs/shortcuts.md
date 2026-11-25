@@ -25,8 +25,12 @@ Press `?` in the dock to open the shortcut menu. `F1` also opens it while typing
 | --- | --- |
 | `Ctrl+g` | Move the highlighted agent. Pick a saved group with `↑` / `↓`, type a new name and choose **Create**, or choose **Ungrouped** to remove it. `Enter` confirms and `Esc` cancels. |
 | `←` / `→` | Collapse or expand a group in the unfiltered group list. Search finds members even when their group is collapsed. |
-| `Ctrl+t` | Toggle triage across all groups. Sessions needing attention come first, with the newest request or unread ping at the top. Other sessions follow from newest to oldest. |
+| `Ctrl+t` | Toggle triage ordering. Sessions needing attention come first, newest request or unread ping first. Other sessions follow from newest to oldest. |
+| `Ctrl+f` | Focus the highlighted group or the highlighted agent’s group. Press again to show all groups. **Ungrouped** works too. |
+| `Ctrl+a` | Show only sessions needing attention. Press again to include routine work. |
 | `Ctrl+s` | Show or hide each running agent’s current working message beneath its title. This works in either view. The option starts off and is remembered for this `tmux` session. |
+
+Triage and both focus filters are remembered when you hide and reopen the dock in the same `tmux` session. The filters work together. To watch **Spectra** for requests, highlight its heading or a member, press `Ctrl+f`, then `Ctrl+a`. A running member appears automatically when it asks for input or rings an unread bell. Search stays inside the chosen focus. An empty list keeps watching without taking the keyboard.
 
 An unread bell, a request for input or a reply, an urgent or crashed state, or manual priority counts as needing attention. A fresh ping can bring an older session to the top without moving the keyboard selection or switching work panes. Opening the window acknowledges its bell. Any remaining request keeps it in the attention group.
 

@@ -1,5 +1,8 @@
-use crate::{groups::GroupStore, identity::Session};
-use std::{ffi::OsString, io, process::Command, time::Duration};
+use crate::{
+    groups::{GroupStore, UNGROUPED},
+    identity::Session,
+};
+use std::{borrow::Cow, ffi::OsString, io, process::Command, time::Duration};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Activity {
@@ -10,6 +13,12 @@ pub(crate) enum Activity {
     Waiting,
     Crashed,
     Urgent,
+}
+
+impl Activity {
+    pub(crate) fn requests_attention(self) -> bool {
+        matches!(self, Self::Waiting | Self::Crashed | Self::Urgent)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -33,6 +42,66 @@ pub(crate) struct Entry {
     pub current: bool,
 }
 
+impl Entry {
+    pub(crate) fn requires_attention(&self) -> bool {
+        self.activity.requests_attention() || self.bell || self.priority
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct DockView {
+    pub triage: bool,
+    pub group: Option<String>,
+    pub attention_only: bool,
+}
+
+impl DockView {
+    pub(crate) fn includes(&self, entry: &Entry) -> bool {
+        self.group
+            .as_ref()
+            .is_none_or(|group| *group == entry.group)
+            && (!self.attention_only || entry.requires_attention())
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum ViewSetting {
+    Triage,
+    Group,
+    AttentionOnly,
+}
+
+const TRIAGE_OPTION: &str = "@omp_dock_triage";
+const FOCUS_GROUP_OPTION: &str = "@omp_dock_focus_group";
+const ATTENTION_OPTION: &str = "@omp_dock_attention_only";
+
+fn snapshot_preferences<'a>(
+    records: &mut std::iter::Peekable<impl Iterator<Item = &'a str>>,
+) -> (DockView, bool) {
+    let mut enabled = |option: &str| {
+        records
+            .next_if(|line| line.starts_with(option))
+            .is_some_and(|line| line.strip_prefix(option) == Some(" on"))
+    };
+    let triage = enabled(TRIAGE_OPTION);
+    let attention_only = enabled(ATTENTION_OPTION);
+    let status_text = records.next() == Some("on");
+    // A valid group has no control characters. Every pane record contains tabs.
+    let group = match records.next_if(|line| !line.contains('\t')) {
+        None | Some("") => None,
+        Some(UNGROUPED) => Some(String::new()),
+        Some(name) => Some(name.to_owned()),
+    };
+    (
+        DockView {
+            triage,
+            group,
+            attention_only,
+        },
+        status_text,
+    )
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Snapshot {
     pub entries: Vec<Entry>,
@@ -40,6 +109,7 @@ pub(crate) struct Snapshot {
     pub active_window: String,
     pub group_error: Option<String>,
     pub status_text: bool,
+    pub view: DockView,
 }
 
 pub(crate) struct Server {
@@ -74,9 +144,14 @@ impl Server {
     }
 
     fn command(&self, arguments: &[&str]) -> io::Result<String> {
+        self.command_with_prefix(&[], arguments)
+    }
+
+    fn command_with_prefix(&self, prefix: &[&str], arguments: &[&str]) -> io::Result<String> {
         let output = Command::new("tmux")
             .arg("-S")
             .arg(&self.socket)
+            .args(prefix)
             .args(arguments)
             .output()?;
         if !output.status.success() {
@@ -144,27 +219,83 @@ impl Server {
         Ok(())
     }
 
+    pub(crate) fn save_view_setting(
+        &self,
+        view: &DockView,
+        setting: ViewSetting,
+    ) -> io::Result<()> {
+        let (option, value) = match setting {
+            ViewSetting::Triage => (TRIAGE_OPTION, if view.triage { "on" } else { "off" }),
+            ViewSetting::AttentionOnly => (
+                ATTENTION_OPTION,
+                if view.attention_only { "on" } else { "off" },
+            ),
+            ViewSetting::Group => (
+                FOCUS_GROUP_OPTION,
+                match view.group.as_deref() {
+                    Some("") => UNGROUPED,
+                    Some(name) => name,
+                    None => "",
+                },
+            ),
+        };
+        // tmux consumes one backslash before a trailing semicolon in an argv element.
+        let value = match value.strip_suffix(';') {
+            Some(prefix) => {
+                let mut argument = String::with_capacity(value.len() + 1);
+                argument.push_str(prefix);
+                argument.push_str(r"\;");
+                Cow::Owned(argument)
+            }
+            None => Cow::Borrowed(value),
+        };
+        self.command(&["set-option", "-t", &self.session, "--", option, &value])?;
+        Ok(())
+    }
+
     pub(crate) fn snapshot(&self) -> io::Result<Option<Snapshot>> {
         self.read_snapshot(true)
     }
 
-    fn read_snapshot(&self, sample_messages: bool) -> io::Result<Option<Snapshot>> {
-        let records = self.command(&[
-            "display-message",
-            "-p",
-            "-t",
-            &self.session,
-            "#{@omp_dock_status_text}",
-            ";",
-            "list-panes",
-            "-s",
-            "-t",
-            &self.session,
-            "-F",
-            PANE_FORMAT,
-        ])?;
-        let mut records = records.lines();
-        let status_text = records.next() == Some("on");
+    fn read_snapshot(&self, include_dock_view: bool) -> io::Result<Option<Snapshot>> {
+        // Format expansion in display-message would let pane options shadow session preferences.
+        let metadata: &[&str] = if include_dock_view {
+            &[
+                "show-options",
+                "-qt",
+                &self.session,
+                TRIAGE_OPTION,
+                ";",
+                "show-options",
+                "-qt",
+                &self.session,
+                ATTENTION_OPTION,
+                ";",
+                "display-message",
+                "-p",
+                "-t",
+                &self.session,
+                "#{?#{==:#{@omp_dock_status_text},on},on,off}",
+                ";",
+                "show-options",
+                "-qvt",
+                &self.session,
+                FOCUS_GROUP_OPTION,
+                ";",
+            ]
+        } else {
+            &[]
+        };
+        let records = self.command_with_prefix(
+            metadata,
+            &["list-panes", "-s", "-t", &self.session, "-F", PANE_FORMAT],
+        )?;
+        let mut records = records.lines().peekable();
+        let (view, status_text) = if include_dock_view {
+            snapshot_preferences(&mut records)
+        } else {
+            (DockView::default(), false)
+        };
         let mut targets = Vec::new();
         let mut entries = Vec::new();
         let mut group_error = None;
@@ -225,10 +356,7 @@ impl Server {
                     }
                 }
             };
-            if sample_messages && status_text && work_activity == Activity::Working && !work.dead {
-                targets.push((entries.len(), work.pane_id, work.capture_start));
-            }
-            entries.push(Entry {
+            let entry = Entry {
                 window_id: work.window_id.to_owned(),
                 index: work.index.to_owned(),
                 pane_id: work.pane_id.to_owned(),
@@ -248,7 +376,15 @@ impl Server {
                     .created
                     .or_else(|| work.created.parse().ok().map(Duration::from_secs)),
                 current: work.current,
-            });
+            };
+            if status_text
+                && work_activity == Activity::Working
+                && !work.dead
+                && view.includes(&entry)
+            {
+                targets.push((entries.len(), work.pane_id, work.capture_start));
+            }
+            entries.push(entry);
         }
         if repair_slots {
             self.command(&[
@@ -295,6 +431,7 @@ impl Server {
             active_window,
             group_error,
             status_text,
+            view,
         }))
     }
 
@@ -477,6 +614,48 @@ impl<'a> Pane<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn raw_group_labels_and_reserved_scopes_survive_snapshot_framing() {
+        for (label, expected) in [
+            (None, None),
+            (Some(""), None),
+            (Some("Ungrouped"), Some("")),
+            (Some("on"), Some("on")),
+            (Some("@omp_dock_triage on"), Some("@omp_dock_triage on")),
+            (
+                Some(r##"-水 "#{session_id}"\;"##),
+                Some(r##"-水 "#{session_id}"\;"##),
+            ),
+        ] {
+            let mut records = ["@omp_dock_attention_only on", "off"]
+                .into_iter()
+                .chain(label)
+                .chain(["@9\t0\t1"])
+                .peekable();
+            let (view, status_text) = snapshot_preferences(&mut records);
+            assert!(!view.triage);
+            assert!(view.attention_only);
+            assert!(!status_text);
+            assert_eq!(view.group.as_deref(), expected);
+            assert_eq!(records.next(), Some("@9\t0\t1"));
+        }
+    }
+
+    #[test]
+    fn only_unresolved_requests_crashes_and_urgent_activity_need_attention() {
+        for activity in [Activity::Waiting, Activity::Crashed, Activity::Urgent] {
+            assert!(activity.requests_attention(), "{activity:?}");
+        }
+        for activity in [
+            Activity::Idle,
+            Activity::Working,
+            Activity::Done,
+            Activity::Sleeping,
+        ] {
+            assert!(!activity.requests_attention(), "{activity:?}");
+        }
+    }
 
     #[test]
     fn a_pane_without_native_timestamps_remains_an_agent() {

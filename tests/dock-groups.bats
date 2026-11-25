@@ -170,3 +170,141 @@ move_agent() {
 	outer send-keys -t a Down Enter
 	eventually is 3 inner display-message -p -t proof '#{window_index}'
 }
+
+@test "group focus on a collapsed heading admits only its members and intersects with search" {
+	group_session 3 10 18
+	title 3 'π > OTHER: Spectra needle decoy'
+	title 10 'π > FIRST: Isotope needle'
+	title 18 'π > SECOND: Fraction polarity'
+	agent_identity proof:10 '11111111-1111-4111-8111-111111111110'
+	agent_identity proof:18 '11111111-1111-4111-8111-111111111118'
+	inner select-window -t proof:18
+	attach a 110 30
+	outer send-keys -t a BTab
+	await_label 'Shift+Tab hide'
+	move_agent Spectra
+	outer send-keys -l -t a '10'
+	eventually hides a 'Fraction polarity'
+	move_agent Spectra
+	outer send-keys -t a Escape
+	await_label 'Keyword or session ID'
+	outer send-keys -t a Left
+	await_label '›▸ Spectra'
+	hides a 'Isotope needle'
+	outer send-keys -t a C-f
+	await_label 'Isotope needle'
+	shows a 'Fraction polarity'
+	hides a 'Spectra needle decoy'
+	hides a '▸ Spectra'
+	outer send-keys -l -t a needle
+	eventually hides a 'Fraction polarity'
+	shows a 'Isotope needle'
+	hides a 'Spectra needle decoy'
+	outer send-keys -t a C-f
+	await_label 'Spectra needle decoy'
+	hides a 'Fraction polarity'
+	outer send-keys -t a Escape
+	await_label '▸ Spectra'
+	hides a 'Isotope needle'
+}
+
+@test "group focus on a member intersects with attention and can be cleared after reassignment empties the group" {
+	group_session 3 10 18
+	title 3 'π > ROUTINE: Daily controls'
+	title 10 'π ! REVIEW: Review isotope'
+	title 18 'π ! ASK: Check polarity'
+	agent_identity proof:18 '11111111-1111-4111-8111-111111111118'
+	inner select-window -t proof:18
+	work=$(inner display-message -p -t proof:18 '#{pane_id}')
+	attach a 110 30
+	outer send-keys -t a BTab
+	await_label 'Shift+Tab hide'
+	move_agent Spectra
+	outer send-keys -t a C-f
+	eventually hides a 'Review isotope'
+	shows a 'Check polarity'
+	outer send-keys -t a C-a
+	work_target=$(inner display-message -p -t "$work" '#{window_index}.#{pane_index}')
+	title "$work_target" 'π > ASK: Check polarity'
+	await_label 'No sessions need attention'
+	hides a 'Review isotope'
+	title "$work_target" 'π ! ASK: Check polarity'
+	await_label 'Check polarity'
+	outer send-keys -t a C-g
+	await_label 'Move to group'
+	outer send-keys -l -t a spectra
+	await_label 'Create spectra'
+	outer send-keys -t a Down Enter
+	await_label 'No sessions need attention'
+	outer send-keys -t a C-f
+	await_label 'Review isotope'
+	shows a 'Check polarity'
+	hides a 'Daily controls'
+	outer send-keys -t a C-a
+	await_label 'Daily controls'
+}
+
+@test "group focus survives hiding with a literal tmux format and trailing semicolon in the group name" {
+	group_session 3 18
+	title 3 'π > OTHER: Outside sample'
+	title 18 'π > MEMBER: Inside sample'
+	agent_identity proof:18 '11111111-1111-4111-8111-111111111118'
+	inner select-window -t proof:18
+	attach a 110 30
+	outer send-keys -t a BTab
+	await_label 'Shift+Tab hide'
+	outer send-keys -t a C-g
+	await_label 'Move to group'
+	outer send-keys -l -t a 'Set #{window_id}'
+	outer send-keys -t a 0x3b
+	await_label 'Create Set #{window_id};'
+	outer send-keys -t a Enter
+	await_label '▾ Set #{window_id};'
+	outer send-keys -t a C-f
+	eventually hides a 'Outside sample'
+	outer send-keys -t a BTab
+	eventually hides a 'NAVIGATOR'
+	outer send-keys -t a BTab
+	await_label 'Shift+Tab hide'
+	await_label 'Inside sample'
+	hides a 'Outside sample'
+	outer send-keys -t a C-f
+	await_label 'Outside sample'
+}
+
+@test "group focus on Ungrouped survives reopening together with attention focus and triage" {
+	group_session 0 3 18
+	title 0 'π ! HOME: Review baseline'
+	title 3 'π ⠋ SCAN: Collecting scans'
+	title 18 'π ! FIT: Check residuals'
+	agent_identity proof:18 '11111111-1111-4111-8111-111111111118'
+	attach a 110 30
+	outer send-keys -t a BTab
+	await_label 'Shift+Tab hide'
+	outer send-keys -l -t a '18'
+	eventually hides a 'Review baseline'
+	move_agent Spectra
+	outer send-keys -t a Escape
+	await_label 'Keyword or session ID'
+	outer send-keys -l -t a '0'
+	eventually hides a 'Check residuals'
+	outer send-keys -t a C-f Escape
+	await_label 'Collecting scans'
+	hides a 'Check residuals'
+	outer send-keys -t a C-a C-t
+	await_label 'NAVIGATOR TRIAGE 1'
+	outer send-keys -t a BTab
+	eventually hides a 'NAVIGATOR'
+	outer send-keys -t a BTab
+	await_label 'NAVIGATOR TRIAGE 1'
+	shows a 'Review baseline'
+	hides a 'Check residuals'
+	hides a 'Collecting scans'
+	outer send-keys -t a C-f
+	await_label 'NAVIGATOR TRIAGE 2'
+	shows a 'Check residuals'
+	hides a 'Collecting scans'
+	outer send-keys -t a C-a
+	await_label 'NAVIGATOR TRIAGE 3'
+	shows a 'Collecting scans'
+}

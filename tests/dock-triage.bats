@@ -12,6 +12,77 @@ ping() { inner show-options -wqv -t "$1" @omp_dock_ping; }
 
 has_ping() { [[ $(ping "$1") =~ ^[1-9][0-9]*\.[1-9][0-9]*$ ]]; }
 
+@test "triage remembers on and off when reopened and stays local to the tmux session" {
+	start_session 0 3
+	title 0 'π > FIRST: Baseline scan'
+	title 3 'π ! SECOND: Input requested'
+	new_session other 0
+	inner select-pane -t other:0 -T 'π > OTHER: Separate run'
+	attach a 110 26
+	attach b 110 26 other
+	outer send-keys -t a BTab
+	eventually shows a 'NAVIGATOR FULL'
+	outer send-keys -t a C-t
+	eventually shows a 'NAVIGATOR TRIAGE'
+	outer send-keys -t a BTab
+	eventually hides a 'NAVIGATOR'
+	outer send-keys -t a BTab
+	eventually shows a 'NAVIGATOR TRIAGE'
+	outer send-keys -t a Enter
+	eventually is 3 inner display-message -p -t proof '#{window_index}'
+	outer send-keys -t b BTab
+	eventually shows b 'NAVIGATOR FULL'
+	outer send-keys -t a BTab
+	eventually shows a 'Shift+Tab hide'
+	outer send-keys -t a C-t
+	eventually shows a 'NAVIGATOR FULL'
+	outer send-keys -t a BTab
+	eventually hides a 'NAVIGATOR'
+	outer send-keys -t a BTab
+	eventually shows a 'NAVIGATOR FULL'
+}
+
+@test "attention focus watches hidden workers and drops sessions whose last signal clears" {
+	start_session 0 3 8
+	title 0 'π > HOME: Baseline controls'
+	title 3 'π ⠋ SCAN: Overnight acquisition'
+	title 8 'π > FIT: Fragment assignment'
+	work=$(inner display-message -p -t proof:0 '#{pane_id}')
+	worker=$(inner display-message -p -t proof:3 '#{pane_id}')
+	attach a 110 26
+	outer send-keys -t a BTab
+	eventually shows a 'Overnight acquisition'
+	outer send-keys -t a C-a
+	eventually shows a 'No sessions need attention'
+	hides a 'Overnight acquisition'
+	hides a 'Fragment assignment'
+	outer send-keys -t a BTab
+	eventually hides a 'NAVIGATOR'
+	outer send-keys -t a BTab
+	eventually shows a 'No sessions need attention'
+	outer send-keys -t a Escape
+	eventually is "$work" inner display-message -p -t proof '#{pane_id}'
+	ring 3
+	eventually shows a 'Overnight acquisition'
+	is "$work" inner display-message -p -t proof '#{pane_id}'
+	outer send-keys -t a BTab
+	eventually shows a 'Shift+Tab hide'
+	outer send-keys -t a Enter
+	eventually is "$worker" inner display-message -p -t proof '#{pane_id}'
+	eventually shows a 'No sessions need attention'
+	title 8 'π ! FIT: Fragment assignment'
+	eventually shows a 'Fragment assignment'
+	hides a 'Overnight acquisition'
+	is "$worker" inner display-message -p -t proof '#{pane_id}'
+	title 8 'π ⠙ FIT: Fragment assignment'
+	eventually shows a 'No sessions need attention'
+	outer send-keys -t a BTab
+	eventually shows a 'Shift+Tab hide'
+	outer send-keys -t a C-a
+	eventually shows a 'Overnight acquisition'
+	shows a 'Fragment assignment'
+}
+
 @test "an older unread window rings again and moves first without taking focus or selection" {
 	start_session 0 8 3 9
 	title 0 'π > OLDEST: Laboratory'

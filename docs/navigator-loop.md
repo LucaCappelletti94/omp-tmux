@@ -61,7 +61,7 @@ Each identified OMP session belongs to at most one named group. Unassigned agent
 | `Esc` | Return to the work pane | Clear the query, retain collapse choices | Cancel the move without changing membership, query or focus |
 | `Tab`, page keys | Toggle view or scroll the selected agent’s description | Same | Ignore |
 | Metadata refresh or external window switch | Keep the selection by window ID or heading name. Follow a newly active agent or its collapsed heading | Follow the existing search selection rules | Keep the original target. Cancel if it disappears, changes identity or the active window switches |
-| `Ctrl+t` | Enter a flat triage view across all groups and select its first agent | Toggle triage ordering of matches | Ignore |
+| `Ctrl+t` | Toggle the saved triage order and select the first agent when entering triage | Apply that order to the matches | Ignore |
 | `Ctrl+s` | Toggle live working messages for this `tmux` session. Refresh immediately | Same | Ignore |
 | Focus change, resize or animation deadline | Redraw the visible view as needed. Animate only visible working agents | Same | Redraw the picker at the new size. Show no agent spinners |
 | `Shift+Tab`, native `tmux` prefix keys, removal of the dock | Follow the dock lifecycle | Same | Same. Closing the dock discards any unconfirmed edit |
@@ -84,16 +84,39 @@ The bell hook records each unread ping with a timestamp and a serial so repeated
 | A session opens, disappears or the active window changes | Use the group navigation rules | Rebuild the two groups. Preserve an existing selection unless the user has switched windows | Revalidate a pending move | No renderer to wake |
 | A bell belongs to a different session or a non-agent window | Exclude it from this roster | No unrelated entry is promoted | No change to the interaction | Do not open or focus a dock |
 
+## Remembered view and focus
+
+The `tmux` session owns three independent dock preferences. `Ctrl+t` chooses the ordering, `Ctrl+f` limits the list to one exact group, and `Ctrl+a` limits it to sessions requiring attention. Group focus includes **Ungrouped** as a choice. An unfocused dock means the work pane has the keyboard. This is independent of which sessions its filters display.
+
+| Event or job | All sessions | Group focus | Attention focus | Both filters |
+| --- | --- | --- | --- | --- |
+| Open or reopen the dock | Restore this session’s order and filters before the first draw. Unset preferences select the ordinary roster | Show only group members | Show only attention signals | Show only group members with attention signals |
+| `Ctrl+f` on a heading or agent | Focus its group, including a collapsed heading | Clear group focus | Focus the selected agent’s group and retain attention focus | Clear group focus and retain attention focus |
+| `Ctrl+f` with no selection | Ignore | Clear group focus | Ignore | Clear group focus |
+| `Ctrl+a` | Enable attention focus | Add attention focus | Clear attention focus | Clear attention focus and retain the group |
+| `Ctrl+t` | Toggle triage | Sort the group | Sort the attention list | Sort the intersection |
+| Membership change, move, new or closed session | Update the roster | Admit or remove the exact member, even if that leaves an empty group | Retain only attention signals | Apply both conditions |
+| Request, bell, acknowledgement or return to routine work | Update the state and triage order | Same within the group | Add or remove the session as its last qualifying signal changes | Same within the group |
+| Search, keyboard navigation, open or pair | Use the existing roster controls | Search and act only on visible members | Search and act only on visible signals | Search and act only on the intersection |
+| Group folding | Use existing headings when browsing | Flat list independent of folds | Flat list independent of folds | Flat list independent of folds |
+| Work focus, resize, live status, spinner or page key | Keep preferences | Same | Same | Same |
+| Group picker or help | Keep the roster current underneath. Ignore the three preference shortcuts in the modal | Same | Same | Same |
+| `Shift+Tab`, pair suspension or closing the renderer | Keep the confirmed preferences in this `tmux` session. Search, open modals and folds remain local to the renderer | Same | Same | Same |
+| Preference write fails | Restore the saved view and show the error. Do not activate a work pane | Same | Same | Same |
+
+`@omp_dock_triage` and `@omp_dock_attention_only` are `on` or `off`. `@omp_dock_focus_group` holds the group name, `Ungrouped` for unassigned sessions, or an empty value for all groups. Each shortcut writes only its own session option. The metadata snapshot reads these options along with the roster. A focus change resets detail scrolling, keeps a highlighted session when it still qualifies and otherwise selects the first result. Entering triage starts at the highest-ranked result. Status updates retain the selected session when present and never steal work focus. An empty scope stays active and continues to watch the full roster.
+
 ## Live working messages
 
 Live messages are off by default. The per-session `@omp_dock_status_text` option keeps the choice when the navigator closes. `set -g @omp_dock_status_text on` enables it by default. In full and compact views, an available message appears immediately under its agent and wraps within the detail column. A group heading never has a status message.
 
 | Event or job | Messages off | Messages on |
 | --- | --- | --- |
-| Metadata deadline | Do not capture any work panes | Sample the displayed viewport of local working OMP panes in one `tmux` batch. Recognize OMP’s working row next to its running footer |
+| Metadata deadline | Do not capture any work panes | Sample the displayed viewport of local working OMP panes that pass the group and attention filters in one `tmux` batch. Recognize OMP’s working row next to its running footer |
 | Input, focus or spinner frame | No status lookup | Reuse the last sample |
 | Work begins, finishes or the working text changes | Render no status | Rebuild affected rows on the metadata refresh. Omit the line if the pane stops working or the working row is unavailable |
 | Search, collapse, triage, resize or compact toggle | Lay out the current projection | Wrap the working text only on displayed agents and keep the selection, paging and spinner coordinates aligned |
+| `Ctrl+f` or `Ctrl+a` | Rebuild the visible roster | Rebuild and sample the working messages for the chosen scope |
 | `Ctrl+s` from the roster | Enable and sample | Disable and drop the displayed messages |
 
 The [OMP working row](https://github.com/can1357/oh-my-pi/blob/v19.1.1/packages/coding-agent/src/modes/interactive-mode.ts#L9246-L9264) carries the current tool or working message. The dock uses the rendered working row and never falls back to a line from the conversation or a prior Telegram summary.
