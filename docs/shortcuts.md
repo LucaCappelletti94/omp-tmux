@@ -1,6 +1,6 @@
 # Session navigator shortcuts
 
-From an OMP work pane, press `Shift+Tab`, type part of a title or a window number, then press `Enter`. The selected agent gets the keyboard at its live prompt. The dock lists OMP windows from the current `tmux` session.
+With the dock visible, click an agent’s title, description or working message to jump straight to its live prompt. From the keyboard, press `Shift+Tab`, type part of a title or a window number, then press `Enter`. The dock lists OMP windows from the current `tmux` session.
 
 Keys in the dock work directly. A footer hint such as `^G` means `Ctrl+g`. For a shortcut written as `Ctrl+b` **then** another key, press and release `Ctrl+b` first. Substitute your own `tmux` prefix if you changed it.
 
@@ -10,7 +10,9 @@ Press `?` in the dock to open the shortcut menu. `F1` also opens it while typing
 
 | Key | What it does |
 | --- | --- |
-| `Shift+Tab` | From work, open or focus the dock. From the focused dock, hide it and return to work. |
+| Left click | Open the session under the pointer and give its prompt the keyboard. |
+| `Shift+Tab` | Switch between the dock and the current work pane without resizing them or clearing the search. From fullscreen, restore the split and focus the dock. From a hidden dock, open it. |
+| `Alt+z` | Give the current work pane the whole window, even if the dock has focus. Press again to restore the split and keep typing in the same pane. |
 | Type, or press `/` and type | Search titles, descriptions, group names, directories, window numbers and OMP session IDs. Notification tags and badge codes also match when available. An exact window number takes priority. |
 | `Backspace` | Remove one character from the search. |
 | `↑` / `↓` | Move through the list. Up from the first item wraps to the last, and down from the last wraps to the first. |
@@ -18,6 +20,8 @@ Press `?` in the dock to open the shortcut menu. `F1` also opens it while typing
 | `Esc` | Clear a nonempty search. With an empty search, return to work and leave the dock visible. |
 | `Tab` | Switch between full, wrapped descriptions and compact headings. |
 | `Page Up` / `Page Down` | Scroll an overlong description or live message one wrapped line at a time. |
+
+With `tmux` mouse mode on and its default click binding, you can click the dock while typing in a work pane. With mouse mode off, press `Shift+Tab` to focus the dock before clicking. The plugin leaves your mouse setting alone.
 
 ## Group sessions and find the ones needing attention
 
@@ -46,6 +50,7 @@ From the first agent, focus the dock with `Shift+Tab` and highlight a **differen
 | --- | --- |
 | `Ctrl+b` then `o` | Move keyboard focus to the other prompt. |
 | `Ctrl+b` then `Space` | Switch between side-by-side and stacked layouts with the default `tmux` binding. |
+| `Alt+z` | Give the focused prompt the whole window. Press again to see both prompts. |
 | `Shift+Tab` | Close the pair and return to the source window for the focused prompt. Selecting a different numbered window also closes the pair. |
 
 ## Jump by number or open the agent menu

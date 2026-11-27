@@ -48,7 +48,7 @@ move_agent() {
 	inner send-keys -l -t "$work" 'unfinished assignment'
 	eventually shows a 'Work> unfinished assignment'
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	identity_format='#{window_id} #{window_index} #{pane_id} #{pane_pid} #{pane_width}x#{pane_height}'
 	before=$(inner display-message -p -t "$work" "$identity_format")
 	move_agent Spectra
@@ -87,9 +87,9 @@ move_agent() {
 	inner select-window -t proof:18
 	attach a 110 30
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	move_agent Spectra
-	outer send-keys -t a BTab
+	pick a l
 	eventually hides a 'NAVIGATOR'
 	inner kill-window -t proof:18
 	inner new-window -d -t proof:18 'sleep 600'
@@ -99,7 +99,7 @@ move_agent() {
 	agent_identity proof:18 '22222222-2222-4222-8222-222222222218'
 	agent_identity proof:28 "$original"
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -l -t a Spectra
 	eventually hides a 'Replacement experiment'
 	shows a 'Continued experiment'
@@ -129,7 +129,7 @@ move_agent() {
 	agent_identity proof:3 '11111111-1111-4111-8111-111111111113'
 	attach a 110 20
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -t a C-g
 	eventually shows a 'Move to group'
 	outer send-keys -l -t a 'Spectra?'
@@ -152,21 +152,21 @@ move_agent() {
 	inner set-option -p -t proof:8 @omp_state urgent
 	attach a 110 30
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -t a Up Enter
 	eventually is 8 inner display-message -p -t proof '#{window_index}'
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -t a Down Enter
 	eventually is 0 inner display-message -p -t proof '#{window_index}'
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -t a C-t
 	eventually shows a 'TRIAGE'
 	outer send-keys -t a Enter
 	eventually is 8 inner display-message -p -t proof '#{window_index}'
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -t a Down Enter
 	eventually is 3 inner display-message -p -t proof '#{window_index}'
 }
@@ -181,7 +181,7 @@ move_agent() {
 	inner select-window -t proof:18
 	attach a 110 30
 	outer send-keys -t a BTab
-	await_label 'Shift+Tab hide'
+	await_label 'Shift+Tab work'
 	move_agent Spectra
 	outer send-keys -l -t a '10'
 	eventually hides a 'Fraction polarity'
@@ -218,7 +218,7 @@ move_agent() {
 	work=$(inner display-message -p -t proof:18 '#{pane_id}')
 	attach a 110 30
 	outer send-keys -t a BTab
-	await_label 'Shift+Tab hide'
+	await_label 'Shift+Tab work'
 	move_agent Spectra
 	outer send-keys -t a C-f
 	eventually hides a 'Review isotope'
@@ -252,7 +252,7 @@ move_agent() {
 	inner select-window -t proof:18
 	attach a 110 30
 	outer send-keys -t a BTab
-	await_label 'Shift+Tab hide'
+	await_label 'Shift+Tab work'
 	outer send-keys -t a C-g
 	await_label 'Move to group'
 	outer send-keys -l -t a 'Set #{window_id}'
@@ -262,10 +262,10 @@ move_agent() {
 	await_label '▾ Set #{window_id};'
 	outer send-keys -t a C-f
 	eventually hides a 'Outside sample'
-	outer send-keys -t a BTab
+	pick a l
 	eventually hides a 'NAVIGATOR'
 	outer send-keys -t a BTab
-	await_label 'Shift+Tab hide'
+	await_label 'Shift+Tab work'
 	await_label 'Inside sample'
 	hides a 'Outside sample'
 	outer send-keys -t a C-f
@@ -280,7 +280,7 @@ move_agent() {
 	agent_identity proof:18 '11111111-1111-4111-8111-111111111118'
 	attach a 110 30
 	outer send-keys -t a BTab
-	await_label 'Shift+Tab hide'
+	await_label 'Shift+Tab work'
 	outer send-keys -l -t a '18'
 	eventually hides a 'Review baseline'
 	move_agent Spectra
@@ -293,7 +293,7 @@ move_agent() {
 	hides a 'Check residuals'
 	outer send-keys -t a C-a C-t
 	await_label 'NAVIGATOR TRIAGE 1'
-	outer send-keys -t a BTab
+	pick a l
 	eventually hides a 'NAVIGATOR'
 	outer send-keys -t a BTab
 	await_label 'NAVIGATOR TRIAGE 1'

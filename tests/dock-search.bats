@@ -16,7 +16,7 @@ load helpers
 	eventually shows a 'Shift+Tab focus'
 	shows a 'Keyword or session ID'
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -l -t a 'RUN/FRAG'
 	eventually shows a 'Inspect run/fragment'
 	eventually hides a 'Review batch'
@@ -36,7 +36,7 @@ load helpers
 	title 3 'π > MATCH: Fragment?'
 	attach a 110 15
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -l -t a '?'
 	eventually shows a 'Keyboard shortcuts'
 	shows a 'Find and open'
@@ -77,18 +77,18 @@ load helpers
 	title 12 'π > LAST: Collect samples'
 	attach a 110 28
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -t a C-b 3
 	eventually is 3 inner display-message -p -t proof '#{window_index}'
 	pick a f
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -t a C-b "'"
 	eventually shows a 'index'
 	outer send-keys -t a 1 2 Enter
 	eventually is 12 inner display-message -p -t proof '#{window_index}'
 	pick a f
-	eventually shows a 'Shift+Tab hide'
-	outer send-keys -t a BTab
+	eventually shows a 'Shift+Tab work'
+	pick a l
 	eventually hides a 'NAVIGATOR'
 	outer send-keys -t a C-b 3
 	eventually is 3 inner display-message -p -t proof '#{window_index}'

@@ -1,10 +1,12 @@
 mod help;
 mod roster;
 
-use std::io;
+use std::io::{self, Write};
 use std::time::{Duration, Instant};
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind,
+};
 use ratatui::backend::Backend;
 use ratatui::buffer::Cell;
 use ratatui::layout::{Position, Rect};
@@ -19,6 +21,41 @@ use crate::group_picker::{GroupPicker, PickerAction};
 use crate::tmux::{Activity, Entry, Server, Snapshot, ViewSetting};
 
 const REFRESH: Duration = Duration::from_secs(2);
+
+struct MouseButtons {
+    enabled: bool,
+}
+
+impl MouseButtons {
+    const DISABLE: &[u8] = b"\x1b[?1000l\x1b[?1006l";
+
+    fn enable() -> io::Result<Self> {
+        let guard = Self { enabled: true };
+        // VT button tracking with SGR coordinates avoids reporting pointer motion.
+        Self::send(b"\x1b[?1006h\x1b[?1000h")?;
+        Ok(guard)
+    }
+
+    fn disable(mut self) -> io::Result<()> {
+        Self::send(Self::DISABLE)?;
+        self.enabled = false;
+        Ok(())
+    }
+
+    fn send(sequence: &[u8]) -> io::Result<()> {
+        let mut output = io::stdout().lock();
+        output.write_all(sequence)?;
+        output.flush()
+    }
+}
+
+impl Drop for MouseButtons {
+    fn drop(&mut self) {
+        if self.enabled {
+            let _ = Self::send(Self::DISABLE);
+        }
+    }
+}
 
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -86,6 +123,7 @@ struct Navigator {
     picker: Option<GroupPicker>,
     help: Option<Help>,
     cursor: usize,
+    clickable: Vec<(Rect, usize)>,
     detail_offset: usize,
     query: String,
     filtering: bool,
@@ -121,6 +159,7 @@ impl Navigator {
             picker: None,
             help: None,
             cursor: 0,
+            clickable: Vec::new(),
             detail_offset: 0,
             query: String::new(),
             filtering: false,
@@ -350,6 +389,37 @@ impl Navigator {
         Input::SaveView(setting)
     }
 
+    fn open_row(&mut self, position: usize, server: &Server) -> Input {
+        let Some(&row) = self.roster.rows.get(position) else {
+            return Input::Ignore;
+        };
+        if self.cursor != position {
+            self.cursor = position;
+            self.detail_offset = 0;
+        }
+        match row {
+            Row::Group(_) => self.fold_group(
+                row,
+                self.roster.is_collapsed(row.group(&self.snapshot.entries)),
+            ),
+            Row::Agent(index) => {
+                self.error = server
+                    .activate(&self.snapshot.entries[index])
+                    .err()
+                    .map(|error| error.to_string());
+                Input::Refresh
+            }
+        }
+    }
+
+    fn click(&mut self, point: Position, server: &Server) -> Input {
+        let Some(&(_, position)) = self.clickable.iter().find(|(area, _)| area.contains(point))
+        else {
+            return Input::Ignore;
+        };
+        self.open_row(position, server)
+    }
+
     fn key(&mut self, key: KeyEvent, server: &Server) -> Input {
         let function_help = key.code == KeyCode::F(1) && key.modifiers.is_empty();
         let question =
@@ -437,19 +507,7 @@ impl Navigator {
             KeyCode::PageUp => self.detail_offset = self.detail_offset.saturating_sub(1),
             KeyCode::PageDown => self.detail_offset = self.detail_offset.saturating_add(1),
             KeyCode::Tab => self.compact = !self.compact,
-            KeyCode::Enter => {
-                if let Some(row @ Row::Group(_)) = self.selected_row() {
-                    return self.fold_group(
-                        row,
-                        self.roster.is_collapsed(row.group(&self.snapshot.entries)),
-                    );
-                }
-                let Some(entry) = self.selection() else {
-                    return Input::Ignore;
-                };
-                self.error = server.activate(entry).err().map(|error| error.to_string());
-                return Input::Refresh;
-            }
+            KeyCode::Enter => return self.open_row(self.cursor, server),
             KeyCode::Esc if self.query.is_empty() => {
                 self.filtering = false;
                 self.error = server.leave().err().map(|error| error.to_string());
@@ -488,8 +546,10 @@ pub(crate) fn run(server: &Server) -> io::Result<()> {
     let Some(snapshot) = server.snapshot()? else {
         return Ok(());
     };
-    let result = ratatui::try_init()
-        .and_then(|mut terminal| navigate(&mut terminal, server, Navigator::new(snapshot)));
+    let result = ratatui::try_init().and_then(|mut terminal| {
+        let buttons = MouseButtons::enable()?;
+        navigate(&mut terminal, server, Navigator::new(snapshot)).and(buttons.disable())
+    });
     result.and(ratatui::try_restore())
 }
 
@@ -527,46 +587,52 @@ fn navigate(
         if !event::poll(deadline.saturating_duration_since(Instant::now()))? {
             continue;
         }
-        match event::read()? {
-            Event::Resize(_, _) => redraw = true,
+        let input = match event::read()? {
+            Event::Resize(_, _) => {
+                redraw = true;
+                continue;
+            }
             Event::Key(key)
                 if key.kind != KeyEventKind::Release
                     && key.code == KeyCode::F(12)
                     && key.modifiers.is_empty() =>
             {
                 refresh_at = Instant::now();
+                continue;
             }
-            Event::Key(key) if key.kind != KeyEventKind::Release => {
-                match navigator.key(key, server) {
-                    Input::Ignore => {}
-                    Input::Redraw => redraw = true,
-                    Input::Refresh => {
-                        refresh_at = Instant::now();
-                        redraw = true;
-                    }
-                    Input::SaveView(setting) => {
-                        if let Err(error) =
-                            server.save_view_setting(&navigator.snapshot.view, setting)
-                        {
-                            navigator.error = Some(format!("Could not save dock view ({error})"));
-                            refresh_at = Instant::now();
-                        } else if navigator.snapshot.status_text
-                            && !matches!(setting, ViewSetting::Triage)
-                        {
-                            refresh_at = Instant::now();
-                        }
-                        redraw = true;
-                    }
-                    Input::Assign(name) => {
-                        if !navigator.assign(server, name.as_deref())? {
-                            return Ok(());
-                        }
-                        refresh_at = Instant::now() + REFRESH;
-                        redraw = true;
-                    }
+            Event::Key(key) if key.kind != KeyEventKind::Release => navigator.key(key, server),
+            Event::Mouse(mouse)
+                if mouse.kind == MouseEventKind::Down(MouseButton::Left)
+                    && mouse.modifiers.is_empty() =>
+            {
+                navigator.click(Position::new(mouse.column, mouse.row), server)
+            }
+            _ => continue,
+        };
+        match input {
+            Input::Ignore => {}
+            Input::Redraw => redraw = true,
+            Input::Refresh => {
+                refresh_at = Instant::now();
+                redraw = true;
+            }
+            Input::SaveView(setting) => {
+                if let Err(error) = server.save_view_setting(&navigator.snapshot.view, setting) {
+                    navigator.error = Some(format!("Could not save dock view ({error})"));
+                    refresh_at = Instant::now();
+                } else if navigator.snapshot.status_text && !matches!(setting, ViewSetting::Triage)
+                {
+                    refresh_at = Instant::now();
                 }
+                redraw = true;
             }
-            _ => {}
+            Input::Assign(name) => {
+                if !navigator.assign(server, name.as_deref())? {
+                    return Ok(());
+                }
+                refresh_at = Instant::now() + REFRESH;
+                redraw = true;
+            }
         }
     }
 }
@@ -715,6 +781,7 @@ fn draw_heading(
 
 impl Navigator {
     fn draw(&mut self, frame: &mut Frame<'_>, spinners: &mut Spinners) {
+        self.clickable.clear();
         spinners.cells.clear();
         spinners.cursor = None;
         let bright = tone(ACCENT).add_modifier(Modifier::BOLD);
@@ -727,7 +794,7 @@ impl Navigator {
             "FULL"
         };
         let (focus, border, title) = if self.snapshot.focused {
-            ("Shift+Tab hide", ACCENT, ACCENT)
+            ("Shift+Tab work", ACCENT, ACCENT)
         } else {
             ("Shift+Tab focus", Color::DarkGray, MUTED)
         };
@@ -907,6 +974,9 @@ impl Navigator {
             });
             let height = u16::try_from(range.len() + 1).expect("row fits the remaining viewport");
             let mut row = take_rows(&mut body, height);
+            if matches!(item, Row::Agent(_)) {
+                self.clickable.push((row, position));
+            }
             let style = if is_selected {
                 Style::default().fg(Color::White).bg(Color::Indexed(24))
             } else {
@@ -1331,7 +1401,7 @@ mod tests {
         let mut navigator = Navigator::new(snapshot(entries(), true));
         navigator.key(KeyCode::Left.into(), &server);
         navigator.key(toggle, &server);
-        assert!(screen(&mut navigator).contains("TRIAGE 9 Shift+Tab hide"));
+        assert!(screen(&mut navigator).contains("TRIAGE 9 Shift+Tab work"));
         for expected in ["@2", "@6", "@5", "@4", "@3", "@7", "@8", "@9", "@1"] {
             assert_eq!(navigator.selection().unwrap().window_id, expected);
             navigator.key(KeyCode::Down.into(), &server);

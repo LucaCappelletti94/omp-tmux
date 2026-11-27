@@ -14,8 +14,23 @@ The first local snapshot starts a full draw. A visible spinner is a `Working` si
 | `Enter` without a selection, key release or unrelated event | Ignore | Ignore |
 | Resize | Redraw at the terminal size | Same |
 | Dock loses its work pane | Exit | Exit |
-| `Shift+Tab` | `tmux` focuses the dock from work or hides the focused dock. The header shows the available action | Same |
+| `Shift+Tab` | Move the keyboard between the dock and the current work pane. From fullscreen, restore the split and focus the dock | Same |
+| `Alt+z` | Toggle fullscreen for the current work pane. Keep any open dock and its selection | Same |
 | Snapshot or terminal I/O fails | Return the error and restore the terminal if initialized | Same |
+
+### Pointer input and work focus
+
+The dock requests button reports from its own terminal. The plugin leaves the `tmux` mouse option unchanged. With the default `tmux` mouse bindings and mouse mode on, a work pane can have focus when the user clicks a session. With mouse mode off, `Shift+Tab` can give the dock focus first.
+
+| Event or job | Roster, including search, focus filters and triage | Group picker or help | Work pane, dock hidden or fullscreen |
+| --- | --- | --- | --- |
+| Plain left press on an agent title, visible description or live message | Open the agent drawn there using the same validated work pane as `Enter`. Leave its prompt focused and the dock open | Ignore the press. No activation through the overlay | A visible dock handles a press delivered to it. Other panes retain their mouse behavior |
+| Press on a heading, field, frame, footer, empty space or an error | Ignore | Ignore | Same |
+| Release, drag, motion, wheel, modified press or another button | Ignore | Ignore | Same |
+| First draw, resize, query, fold, modal, viewport, bell or metadata change | Every full draw replaces clickable areas with the visible agent rectangles for that frame. A missing target cannot fall through to another agent | Clear the roster targets | Keep ordinary input outside the dock |
+| Spinner deadline or unchanged snapshot | Keep the clickable areas for the displayed frame | No roster targets | No change |
+| `Shift+Tab` | Return to the current work pane at its prompt without opening the highlighted agent | Return to work, retaining the modal | Open or focus the dock. Leave the paired view at its focused source. Pass the key through outside an OMP session |
+| `Alt+z` | Zoom the last work pane in this window and give it the keyboard | Zoom the work pane, keeping the modal | Toggle the current work pane’s zoom. Restore the prior split and retain work focus on exit. A paired view zooms its focused side. Pass the key through outside OMP |
 
 The first interior row of the roster shows the search field. An empty field hints at keyword or session ID search. The remaining rows hold results and controls as space permits. The dock receives typing only when focused. A focus change retains the query and editing state. The hardware cursor appears only while editing in the focused dock.
 

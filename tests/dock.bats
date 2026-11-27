@@ -3,13 +3,13 @@
 
 load helpers
 
-@test "Shift+Tab opens, focuses and hides the dock while plain Tab switches views" {
+@test "Shift+Tab moves between dock and work and keeps the compact view" {
 	start_session 0 1
 	title 1 'π > LAB: Analyze spectra'
 	attach a 110 28
 	work=$(inner display-message -p -t proof '#{pane_id}')
 	outer send-keys -H -t a 1b 5b 5a
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	dock=$(inner display-message -p -t proof '#{pane_id}')
 	[ "$work" != "$dock" ]
 	outer send-keys -t a Escape
@@ -18,23 +18,24 @@ load helpers
 	eventually is "$dock" inner display-message -p -t proof '#{pane_id}'
 	outer send-keys -t a Tab
 	eventually shows a 'COMPACT'
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -t a BTab
 	eventually is "$work" inner display-message -p -t proof '#{pane_id}'
-	eventually is 0 inner display-message -p -t "$work" '#{pane_left}'
+	shows a 'COMPACT'
 	outer send-keys -t a BTab
-	eventually shows a 'NAVIGATOR'
+	eventually is "$dock" inner display-message -p -t proof '#{pane_id}'
+	shows a 'COMPACT'
 }
 
-@test "Shift+Tab reaches the application in a session without an OMP window" {
+@test "Shift+Tab and Alt+z reach the application in a session without an OMP window" {
 	start_session 0
-	inner respawn-pane -k -t proof:0 'stty raw -echo; printf "Waiting for key"; dd bs=1 count=3 2>/dev/null | od -An -tx1; sleep 600'
+	inner respawn-pane -k -t proof:0 'stty raw -echo; printf "Waiting for keys"; dd bs=1 count=5 2>/dev/null | od -An -tx1; sleep 600'
 	new_session other 0
 	inner select-pane -t other:0 -T 'π > FOREIGN: Separate session'
 	attach a 110 28
-	eventually shows a 'Waiting for key'
-	outer send-keys -t a BTab
-	eventually shows a '1b 5b 5a'
+	eventually shows a 'Waiting for keys'
+	outer send-keys -t a BTab M-z
+	eventually shows a '1b 5b 5a 1b 7a'
 }
 
 @test "a working spinner moves between title updates and retains its priority flag" {
@@ -97,12 +98,12 @@ load helpers
 	# A detach worker can already hold the native-row publication when the dock opens.
 	printf 'window 0\n' | "$helper" plan 5 20 | "$helper" render "$session_id" "$(request)" shown >"$BATS_TEST_TMPDIR/pending"
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	menu a
 	hides a 'Show the bar'
 	outer send-keys -t a Escape
 	eventually hides a 'omp-tmux agents'
-	outer send-keys -t a BTab
+	pick a l
 	eventually is 1 inner display-message -p -t proof:0 '#{window_panes}'
 	inner source-file "$BATS_TEST_TMPDIR/pending"
 	is off height

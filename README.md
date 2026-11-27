@@ -26,10 +26,10 @@ From the plugin directory, build `omp-dock` with Rust 1.88 or newer. If you use 
 cargo build --release --locked
 ```
 
-In a work pane, press `Shift+Tab`, type part of an agent’s title, then press `Enter` to open its prompt. Press `?` in the dock for shortcuts, or `F1` while typing. The [shortcut guide](docs/shortcuts.md) covers grouping, triage, paired prompts, native window jumps and the bottom grid.
+Click a session in the dock to open its live prompt, or press `Shift+Tab`, type part of its title and press `Enter`. `Shift+Tab` moves the keyboard between dock and work. `Alt+z` toggles fullscreen for the current work pane. Press `?` in the dock for shortcuts, or `F1` while typing. The [shortcut guide](docs/shortcuts.md) covers mouse settings, grouping, triage and paired prompts.
 
 While the dock is open, it reserves a 40-column strip in suitable windows of this session. Switching between them keeps the work panes at the same size. The dock needs an unzoomed, unshared window at least 76 columns wide. Hiding it returns those columns to work. To keep OMP from replaying the transcript when its width changes, run `omp config set tui.resizeScrollback preserve`. This [OMP profile setting](https://github.com/can1357/oh-my-pi/blob/v19.1.1/docs/settings.md#live-file-changes) keeps older lines in scrollback at their existing wrapping and redraws the current prompt at the new width.
 
-`@omp_max_rows` (`5`), `@omp_label_width` (`20`), `@omp_key` (`A`) and the styles `@omp_style_waiting`, `@omp_style_bell`, `@omp_style_priority`, `@omp_style_working`, `@omp_style_muted`, `@omp_style_urgent`, `@omp_style_sleeping`, `@omp_style_done`, `@omp_style_crashed` and `@omp_style_current` take effect when set before sourcing. omp-tmux owns the whole status bar, so `status-left` and `status-right` do not show. It leaves the mouse alone, best kept off for native selection and link clicking.
+`@omp_max_rows` (`5`), `@omp_label_width` (`20`), `@omp_key` (`A`) and the styles `@omp_style_waiting`, `@omp_style_bell`, `@omp_style_priority`, `@omp_style_working`, `@omp_style_muted`, `@omp_style_urgent`, `@omp_style_sleeping`, `@omp_style_done`, `@omp_style_crashed` and `@omp_style_current` take effect when set before sourcing. omp-tmux owns the whole status bar, so `status-left` and `status-right` do not show. It leaves your `tmux` mouse settings unchanged.
 
 The layout helper in `scripts/` needs `sh`, `awk` and `pkill`. CI runs the tests on tmux 3.2a through 3.8 on Linux, on Alpine with BusyBox, and on Homebrew's tmux on macOS.

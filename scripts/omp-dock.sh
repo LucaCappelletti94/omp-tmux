@@ -53,15 +53,17 @@ release_slot() {
 	tm "$@" >/dev/null
 }
 
+# Prefer the current work split, then the one that had focus before the dock.
+work_action() {
+	work=$(tm list-panes -t "$session:" -f "#{==:$owned,0}" -F '#{window_id}.#{pane_id} #{pane_active} #{pane_last}' |
+		awk '{rank=1+2*$2+$3; if (rank>best) {best=rank; work=$1}} END {print work}')
+	[ -n "$work" ] || return 0
+	tm if-shell -F -t "$session:$work" '#{==:#{pane_mode},copy-mode}' "send-keys -t '$session:$work' -X cancel" \
+		\; "$@" -t "$session:$work"
+}
+
 close_dock() {
-	if [ "$action" = toggle ]; then
-		work=$(tm list-panes -t "$session:" -f "#{==:$owned,0}" -F '#{window_id}.#{pane_id} #{pane_active} #{pane_last}' |
-			awk '{rank=1+2*$2+$3; if (rank>best) {best=rank; work=$1}} END {print work}')
-		if [ -n "$work" ]; then
-			tm if-shell -F -t "$session:$work" '#{==:#{pane_mode},copy-mode}' "send-keys -t '$session:$work' -X cancel" \
-				\; select-pane -t "$session:$work" || :
-		fi
-	fi
+	if [ "$action" = toggle ]; then work_action select-pane -Z || :; fi
 	slots=$(tm list-panes -s -t "$session:" -f "$owned" -F '#{window_active} #{window_id} #{pane_id}' | sort -k1,1nr)
 	tm set-option -qu -t "$session" @omp_dock_status \; set-option -qu -t "$session" @omp_dock_pane
 	while read -r current window slot; do
@@ -101,13 +103,13 @@ windows() {
 				if ($6 == "latest" && latest_width && latest_height) { width=latest_width; height=latest_height }
 				if ($6 == "smallest" && minimum_width) { width=minimum_width; height=minimum_height }
 				if ($6 == "largest" && maximum_width) { width=maximum_width; height=maximum_height }
-				print $2, $3, (links[$2]==1 && !$7 && width>=76), $8, $9, $4 "x" $5, width, height, $10
+				state=(links[$2]!=1 || width<76) ? "unavailable" : ($7 ? "zoomed" : "ready")
+				print $2, $3, state, $8, $9, $4 "x" $5, width, height, $10
 			}
 		}'
 }
 
 reserve() {
-	target="$session:$window"
 	if [ "$size" != "${width}x$height" ]; then
 		policy=$(tm show-options -wqv -t "$target" window-size) || return 1
 		set -- resize-window -t "$target" -x "$width" -y "$height" \;
@@ -132,8 +134,9 @@ reserve() {
 reconcile() {
 	rows=$(windows)
 	destination='' source=''
-	while read -r window current suitable panes slot size width height prepared_size; do
+	while read -r window current state panes slot size width height prepared_size; do
 		[ -n "$window" ] || continue
+		target="$session:$window"
 		slot=${slot#-}
 		if [ -n "$slot" ] && [ "$panes" = 1 ]; then
 			release_slot "$window" "$slot" || :
@@ -141,10 +144,18 @@ reconcile() {
 			if [ "$current" = 1 ]; then return 0; fi
 			continue
 		fi
-		if [ "$suitable" = 0 ] || ! reserve; then
+		if [ "$state" = zoomed ]; then
+			if [ "$current" = 1 ] && [ "$action" = focus ]; then
+				tm resize-pane -Z -t "$target" || return 1
+				state=ready
+			elif [ -z "$slot" ]; then
+				continue
+			fi
+		fi
+		if [ "$state" = unavailable ] || { [ "$state" = ready ] && ! reserve; }; then
 			if [ "$current" = 1 ]; then
 				close_dock
-				tm display-message -t "$session" 'Left dock closed: this window is shared, zoomed or too narrow.'
+				tm display-message -t "$session" 'Left dock closed. This window cannot reserve space on the left.'
 				return 0
 			fi
 			[ -z "$slot" ] || release_slot "$window" "$slot" || :
@@ -162,8 +173,8 @@ reconcile() {
 			\; set-option -t "$session" @omp_bar dock
 		renderer=$current_slot
 	elif [ "$source" != "$destination" ]; then
-		tm if-shell -F -t "$source.$renderer" '#{pane_active}' "select-pane -l -t '$source.$renderer'" \
-			\; swap-pane -d -s "$source.$renderer" -t "$destination.$current_slot"
+		tm if-shell -F -t "$source.$renderer" '#{pane_active}' "select-pane -lZ -t '$source.$renderer'" \
+			\; swap-pane -dZ -s "$source.$renderer" -t "$destination.$current_slot"
 	fi
 	if [ "$action" != follow ] && [ "$action" != resume ]; then
 		tm if-shell -F -t "$destination.$renderer" '#{==:#{pane_mode},copy-mode}' "send-keys -t '$destination.$renderer' -X cancel" \; select-pane -t "$destination.$renderer"
@@ -173,7 +184,7 @@ reconcile() {
 binary=$(dirname "$0")/../target/release/omp-dock
 if [ ! -x "$binary" ]; then binary=$(command -v omp-dock || :); fi
 
-case $action in focus | follow | toggle | suspend | resume) ;; *) exit 2 ;; esac
+case $action in focus | work | fullscreen | follow | toggle | suspend | resume) ;; *) exit 2 ;; esac
 lock || exit 1
 previous=$(option @omp_dock_status)
 if [ "$action" = suspend ]; then
@@ -181,7 +192,21 @@ if [ "$action" = suspend ]; then
 	exit 0
 fi
 if [ -n "$(option @omp_pair_busy)$(option @omp_pair_owner)" ]; then exit 0; fi
-if [ -n "$previous" ] && [ "$action" = toggle ]; then close_dock; exit; fi
+if [ "$action" = work ]; then
+	work_action select-pane
+	exit
+fi
+if [ "$action" = fullscreen ]; then
+	work_action resize-pane -Z
+	action=follow
+fi
+if [ "$action" = toggle ]; then
+	if [ -n "$previous" ]; then
+		close_dock
+		exit
+	fi
+	action=focus
+fi
 if [ -z "$previous" ] && [ "$action" = follow ]; then exit; fi
 if [ ! -x "$binary" ]; then
 	tm display-message -t "$session" 'Build the navigator with cargo build --release --locked in omp-tmux'

@@ -19,7 +19,7 @@ print_working_row() {
 	print_working_row "$other" 'Fitting isotope envelopes'
 	attach a 110 30
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	hides a 'Reading calibration scans'
 	outer send-keys -t a C-s
 	eventually shows a 'Reading calibration scans'
@@ -35,7 +35,7 @@ print_working_row() {
 	inner select-pane -T 'π > SCAN: Compare fractions' -t "$worker"
 	eventually hides a 'Aligning fragment peaks'
 	shows a 'Fitting isotope envelopes'
-	outer send-keys -t a BTab
+	pick a l
 	eventually hides a 'NAVIGATOR'
 	outer send-keys -t a BTab
 	eventually shows a 'Fitting isotope envelopes'

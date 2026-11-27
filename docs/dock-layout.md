@@ -1,15 +1,17 @@
 # Dock layout
 
-An open dock reserves a full-height left pane in each suitable window of its session. A suitable window has a single link, is unzoomed and is at least 76 columns wide. The reservation is 40 columns plus its border. One pane runs the navigator. Other reservations are empty `tmux` panes with no child process. The session records the renderer’s pane ID. Work panes keep their identities and their positions relative to each other.
+An open dock reserves a full-height left pane in each suitable window of its session. A new reservation requires a single link, an unzoomed layout and at least 76 columns. The reservation is 40 columns plus its border. One pane runs the navigator. Other reservations are empty `tmux` panes with no child process. The session records the renderer’s pane ID. Work panes keep their identities and their positions relative to each other.
 
 The rounded frame sits inside the 40-column reservation. Its top edge carries the view, match count and focus shortcut. The outline brightens when the dock has focus.
 
 | Event or job | Grid selected | Navigator hidden | Navigator open |
 | --- | --- | --- | --- |
 | Open or focus | Temporarily hide the grid and prepare the session. Select navigator mode on success. Restore the original status setting if preparation fails | Prepare and focus the navigator if suitable. Keep the grid off | Reconcile and focus the renderer if suitable |
-| Hide via shortcut or menu | The shortcut opens the navigator in a session with an OMP window | Reopen the navigator | Select the active work pane or the last work pane if the dock had focus. Leave copy mode only in that pane. Release reservations and keep the grid off |
-| Select a window | Use native window selection | Same | In a suitable window, swap in the renderer without resizing work. Close in an unsuitable window and keep the grid off |
-| Create a window, attach or resize a client | Refresh the grid | Leave the workspace alone | Reconcile background reservations without selecting them. Skip linked, zoomed and narrow windows. Close if the current window is unsuitable |
+| Hide via the agent menu | Open the navigator in a suitable window | Reopen the navigator | Select the active work pane or the last work pane if the dock had focus. Leave copy mode only in that pane. Release reservations and keep the grid off |
+| `Shift+Tab` | Open the navigator in a session with an OMP window, otherwise forward the key | Open and focus the dock | From the dock, give the last work pane the keyboard at its prompt. From work, leave zoom if needed and focus the dock. Retain the query and layout |
+| `Alt+z` | Toggle the work pane’s native zoom in an OMP window, otherwise forward the key | Same | Toggle the current work pane’s zoom. A focused dock gives the last work pane the keyboard first. Keep the renderer, other splits, history and filter settings |
+| Select a window | Use native window selection | Same | In a suitable window, move the renderer without resizing work. Keep a zoomed work pane fullscreen and the dock ready when its split returns. Close in a shared or narrow window |
+| Create a window, attach or resize a client | Refresh the grid | Leave the workspace alone | Reconcile background reservations without selecting them. Keep reservations under work fullscreen and skip new reservations in shared, zoomed or narrow windows |
 | Work pane exits or is killed | Use native pane removal | Same | Remove a reservation that has lost its last work pane and allow its window to retire |
 | Renderer or hosting window disappears | Ignore | Ignore | Start a renderer for the current suitable window. Keep other reservations |
 | Metadata refresh | No renderer | No renderer | Reconcile a lone reservation or a missing reservation in a prepared window |
@@ -36,6 +38,7 @@ Hiding a real split returns its width to the work application. OMP’s [`tui.res
 | `Ctrl+b`, then `o` | Native next pane | Cycle between the two interactive views |
 | `Ctrl+b`, then `Space` | Native next layout or the existing custom binding | With the default binding, alternate columns and rows. A custom binding retains its action |
 | `Shift+Tab` | Normal dock action | Close the view and return to a source window. Restore access to the dock |
+| `Alt+z` | Toggle fullscreen for the current work pane | Zoom the focused side. Press again to restore both prompts |
 | Select a different window by number | Native selection | Keep the selected window and release the pair |
 | Close a view, source window or session | Native lifecycle | Retire the pair and its private sessions. Only the original work windows own the agents |
 | Resize or attach | Normal dock reconciliation | Let `tmux` resize the two views. Give neither view a navigator reservation or duplicate grid |

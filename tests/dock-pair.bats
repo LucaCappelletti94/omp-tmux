@@ -20,7 +20,7 @@ pair_fixture() {
 	attach a 132 32
 	eventually shows a 'alpha>'
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	eventually shows a 'First endpoint'
 	eventually shows a 'Second endpoint'
 }
@@ -81,6 +81,13 @@ pair_released() {
 	eventually differs "$focused" inner display-message -p -t proof '#{pane_id}'
 	outer send-keys -l -t a 'other edit'
 	eventually shows a "$second> other edit"
+	outer send-keys -t a M-z
+	eventually is 1 inner display-message -p -t "$pair_window" '#{window_zoomed_flag}'
+	eventually shows a "$second> other edit"
+	eventually hides a "$first> unfinished"
+	outer send-keys -t a M-z
+	eventually is 0 inner display-message -p -t "$pair_window" '#{window_zoomed_flag}'
+	eventually shows a "$first> unfinished"
 	outer send-keys -t a C-b Space
 	eventually is rows pair_orientation
 	eventually shows a "$first> unfinished"
@@ -97,8 +104,8 @@ pair_released() {
 	outer send-keys -t a BTab
 	pair_released
 	case $(inner display-message -p -t proof '#{window_index}') in 0 | 3) ;; *) return 1 ;; esac
-	if ! shows a 'Shift+Tab hide'; then outer send-keys -t a BTab; fi
-	eventually shows a 'Shift+Tab hide'
+	if ! shows a 'Shift+Tab work'; then outer send-keys -t a BTab; fi
+	eventually shows a 'Shift+Tab work'
 }
 
 @test "native prefix selection leaves the requested numbered window active and retires both viewers" {

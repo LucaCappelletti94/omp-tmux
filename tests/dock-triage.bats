@@ -24,7 +24,7 @@ has_ping() { [[ $(ping "$1") =~ ^[1-9][0-9]*\.[1-9][0-9]*$ ]]; }
 	eventually shows a 'NAVIGATOR FULL'
 	outer send-keys -t a C-t
 	eventually shows a 'NAVIGATOR TRIAGE'
-	outer send-keys -t a BTab
+	pick a l
 	eventually hides a 'NAVIGATOR'
 	outer send-keys -t a BTab
 	eventually shows a 'NAVIGATOR TRIAGE'
@@ -33,10 +33,10 @@ has_ping() { [[ $(ping "$1") =~ ^[1-9][0-9]*\.[1-9][0-9]*$ ]]; }
 	outer send-keys -t b BTab
 	eventually shows b 'NAVIGATOR FULL'
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -t a C-t
 	eventually shows a 'NAVIGATOR FULL'
-	outer send-keys -t a BTab
+	pick a l
 	eventually hides a 'NAVIGATOR'
 	outer send-keys -t a BTab
 	eventually shows a 'NAVIGATOR FULL'
@@ -56,7 +56,7 @@ has_ping() { [[ $(ping "$1") =~ ^[1-9][0-9]*\.[1-9][0-9]*$ ]]; }
 	eventually shows a 'No sessions need attention'
 	hides a 'Overnight acquisition'
 	hides a 'Fragment assignment'
-	outer send-keys -t a BTab
+	pick a l
 	eventually hides a 'NAVIGATOR'
 	outer send-keys -t a BTab
 	eventually shows a 'No sessions need attention'
@@ -66,7 +66,7 @@ has_ping() { [[ $(ping "$1") =~ ^[1-9][0-9]*\.[1-9][0-9]*$ ]]; }
 	eventually shows a 'Overnight acquisition'
 	is "$work" inner display-message -p -t proof '#{pane_id}'
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -t a Enter
 	eventually is "$worker" inner display-message -p -t proof '#{pane_id}'
 	eventually shows a 'No sessions need attention'
@@ -77,7 +77,7 @@ has_ping() { [[ $(ping "$1") =~ ^[1-9][0-9]*\.[1-9][0-9]*$ ]]; }
 	title 8 'π ⠙ FIT: Fragment assignment'
 	eventually shows a 'No sessions need attention'
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	outer send-keys -t a C-a
 	eventually shows a 'Overnight acquisition'
 	shows a 'Fragment assignment'
@@ -96,7 +96,7 @@ has_ping() { [[ $(ping "$1") =~ ^[1-9][0-9]*\.[1-9][0-9]*$ ]]; }
 	initial=$(ping proof:8)
 	is '' inner show-options -qv -t proof @omp_dock_pane
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	dock=$(inner display-message -p -t proof '#{pane_id}')
 	outer send-keys -t a C-t
 	eventually shows a 'TRIAGE'
@@ -145,7 +145,7 @@ has_ping() { [[ $(ping "$1") =~ ^[1-9][0-9]*\.[1-9][0-9]*$ ]]; }
 	inner source-file "$root/omp-tmux.conf"
 	is "$older" inner show-options -wqv -t proof:90 @omp_dock_created
 	outer send-keys -t a BTab
-	eventually shows a 'Shift+Tab hide'
+	eventually shows a 'Shift+Tab work'
 	dock=$(inner display-message -p -t proof '#{pane_id}')
 	outer send-keys -t a C-t
 	eventually is 'SECOND FIRST' roster_order
