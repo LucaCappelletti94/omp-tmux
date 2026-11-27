@@ -119,6 +119,89 @@ move_agent() {
 	eventually is "$member" inner display-message -p -t proof '#{pane_id}'
 }
 
+@test "folded and expanded headings survive reopening independently in each tmux session" {
+	group_session 0 18
+	new_session other 0 18
+	title 0 'π > HOME: Baseline controls'
+	title 18 'π > MEMBER: Fraction polarity'
+	inner select-pane -t other:0 -T 'π > REF: Reference controls'
+	inner select-pane -t other:18 -T 'π > MEMBER: Reference polarity'
+	identity=11111111-1111-4111-8111-111111111118
+	agent_identity proof:18 "$identity"
+	agent_identity other:18 "$identity"
+	inner select-window -t proof:18
+	attach a 110 28
+	attach b 110 28 other
+	outer send-keys -t a BTab
+	await_label 'Shift+Tab work'
+	group='Lab, "α"; #{window_id}'
+	move_agent "$group"
+	await_label "▾ $group"
+	outer send-keys -t a Left
+	await_label "›▸ $group"
+	dock=$(inner show-options -qv -t proof @omp_dock_pane)
+	left_click a 8 "$(dock_line "$dock" '▾ Ungrouped')"
+	await_label '›▸ Ungrouped'
+	pick a l
+	eventually hides a 'NAVIGATOR'
+	outer send-keys -t a BTab
+	await_label "›▸ $group"
+	shows a '▸ Ungrouped'
+	hides a 'Fraction polarity'
+	hides a 'Baseline controls'
+
+	outer send-keys -t b BTab
+	eventually shows b "▾ $group"
+	shows b 'Reference controls'
+	shows b 'Reference polarity'
+	outer send-keys -l -t a baseline
+	await_label 'Baseline controls'
+	outer send-keys -t a Escape
+	await_label '›▸ Ungrouped'
+	outer send-keys -t a Right
+	await_label 'Baseline controls'
+	pick a l
+	eventually hides a 'NAVIGATOR'
+	outer send-keys -t a BTab
+	await_label "›▸ $group"
+	shows a 'Baseline controls'
+	hides a 'Fraction polarity'
+	outer send-keys -t a Enter
+	await_label 'Fraction polarity'
+	pick a l
+	eventually hides a 'NAVIGATOR'
+	outer send-keys -t a BTab
+	await_label "▾ $group"
+	shows a 'Fraction polarity'
+	shows a 'Baseline controls'
+}
+
+@test "moving a session into a folded group keeps its destination expanded on reopen" {
+	group_session 0 18
+	title 0 'π > HOME: Baseline controls'
+	title 18 'π > MEMBER: Fraction polarity'
+	agent_identity proof:0 '11111111-1111-4111-8111-111111111110'
+	agent_identity proof:18 '11111111-1111-4111-8111-111111111118'
+	attach a 110 28
+	outer send-keys -t a BTab
+	await_label 'Shift+Tab work'
+	move_agent Spectra
+	await_label '▾ Spectra'
+	outer send-keys -t a Left
+	await_label '›▸ Spectra'
+	outer send-keys -l -t a '18'
+	await_label '/ 18'
+	move_agent Spectra
+	outer send-keys -t a Escape
+	await_label '▾ Spectra'
+	pick a l
+	eventually hides a 'NAVIGATOR'
+	outer send-keys -t a BTab
+	await_label '▾ Spectra'
+	shows a 'Baseline controls'
+	shows a 'Fraction polarity'
+}
+
 @test "group membership follows a resumed OMP ID and supports moving, cancelling and ungrouping" {
 	group_session 3 18
 	title 3 'π > CONTROL: Calibration'

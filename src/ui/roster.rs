@@ -87,7 +87,7 @@ pub(super) struct Roster {
     pub(super) rows: Vec<Row>,
     pub(super) count: usize,
     grouped_order: Vec<usize>,
-    collapsed: BTreeSet<String>,
+    pub(super) collapsed: BTreeSet<String>,
     windows: HashMap<u32, WindowSignals>,
     keys: Vec<TriageKey>,
     latest_ping: Option<(u64, u64)>,

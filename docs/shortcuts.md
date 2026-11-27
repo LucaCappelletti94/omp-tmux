@@ -28,11 +28,13 @@ With `tmux` mouse mode on and its default click binding, you can click the dock 
 | Key | What it does |
 | --- | --- |
 | `Ctrl+g` | Move the highlighted agent. Pick a saved group with `↑` / `↓`, type a new name and choose **Create**, or choose **Ungrouped** to remove it. `Enter` confirms and `Esc` cancels. |
-| `←` / `→` | Collapse or expand a group in the unfiltered group list. Search finds members even when their group is collapsed. |
+| `←` / `→` | Collapse or expand a group in the unfiltered list. Search still finds members of folded groups. |
 | `Ctrl+t` | Toggle triage ordering. Sessions needing attention come first, newest request or unread ping first. Other sessions follow from newest to oldest. |
 | `Ctrl+f` | Focus the highlighted group or the highlighted agent’s group. Press again to show all groups. **Ungrouped** works too. |
 | `Ctrl+a` | Show only sessions needing attention. Press again to include routine work. |
 | `Ctrl+s` | Show or hide each running agent’s current working message beneath its title. This works in either view. The option starts off and is remembered for this `tmux` session. |
+
+The dock remembers folded groups, including **Ungrouped**, when you close and reopen it in the same `tmux` session. A click, `Enter` and the arrow keys all save the same choice. Other `tmux` sessions keep their own folds.
 
 Triage and both focus filters are remembered when you hide and reopen the dock in the same `tmux` session. The filters work together. To watch **Spectra** for requests, highlight its heading or a member, press `Ctrl+f`, then `Ctrl+a`. A running member appears automatically when it asks for input or rings an unread bell. Search stays inside the chosen focus. An empty list keeps watching without taking the keyboard.
 

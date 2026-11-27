@@ -1,6 +1,7 @@
 mod help;
 mod roster;
 
+use std::collections::BTreeSet;
 use std::io::{self, Write};
 use std::time::{Duration, Instant};
 
@@ -135,12 +136,13 @@ enum Input {
     Ignore,
     Redraw,
     Refresh,
+    SaveFolds,
     SaveView(ViewSetting),
     Assign(Option<String>),
 }
 
 impl Navigator {
-    fn new(snapshot: Snapshot) -> Self {
+    fn new(snapshot: Snapshot, saved_folds: io::Result<BTreeSet<String>>) -> Self {
         let current = if snapshot.view.triage {
             None
         } else {
@@ -151,6 +153,13 @@ impl Navigator {
                 .map(Row::Agent)
         };
         let mut roster = Roster::default();
+        let error = match saved_folds {
+            Ok(groups) => {
+                roster.collapsed = groups;
+                None
+            }
+            Err(error) => Some(format!("Could not read folded groups ({error})")),
+        };
         roster.observe(&snapshot.entries);
         roster.index_groups(&snapshot.entries);
         let mut navigator = Self {
@@ -164,7 +173,7 @@ impl Navigator {
             query: String::new(),
             filtering: false,
             compact: false,
-            error: None,
+            error,
         };
         navigator.rebuild(current);
         navigator
@@ -317,7 +326,17 @@ impl Navigator {
         self.detail_offset = 0;
         self.rebuild(Some(row));
         self.error = None;
-        Input::Redraw
+        Input::SaveFolds
+    }
+
+    fn save_folds(&mut self, server: &Server) {
+        if let Err(error) = server.save_folded_groups(&self.roster.collapsed) {
+            self.error = Some(format!("Could not save folded groups ({error})"));
+            if let Ok(groups) = server.folded_groups() {
+                self.roster.collapsed = groups;
+                self.rebuild(self.selected_row());
+            }
+        }
     }
 
     fn assign(&mut self, server: &Server, name: Option<&str>) -> io::Result<bool> {
@@ -340,10 +359,11 @@ impl Navigator {
         };
         let switched = self.snapshot.active_window != snapshot.active_window;
         self.refresh(snapshot);
-        if self.roster.expand(name.unwrap_or_default())
-            && self.roster.grouped(&self.query, &self.snapshot.view)
-        {
-            self.rebuild(self.selected_row());
+        if self.roster.expand(name.unwrap_or_default()) {
+            if self.roster.grouped(&self.query, &self.snapshot.view) {
+                self.rebuild(self.selected_row());
+            }
+            self.save_folds(server);
         }
         if !switched {
             if let Some(position) = self.roster.rows.iter().position(|&row| {
@@ -546,9 +566,10 @@ pub(crate) fn run(server: &Server) -> io::Result<()> {
     let Some(snapshot) = server.snapshot()? else {
         return Ok(());
     };
+    let navigator = Navigator::new(snapshot, server.folded_groups());
     let result = ratatui::try_init().and_then(|mut terminal| {
         let buttons = MouseButtons::enable()?;
-        navigate(&mut terminal, server, Navigator::new(snapshot)).and(buttons.disable())
+        navigate(&mut terminal, server, navigator).and(buttons.disable())
     });
     result.and(ratatui::try_restore())
 }
@@ -614,6 +635,10 @@ fn navigate(
             Input::Redraw => redraw = true,
             Input::Refresh => {
                 refresh_at = Instant::now();
+                redraw = true;
+            }
+            Input::SaveFolds => {
+                navigator.save_folds(server);
                 redraw = true;
             }
             Input::SaveView(setting) => {
@@ -1073,6 +1098,10 @@ mod tests {
         }
     }
 
+    fn navigator(snapshot: Snapshot) -> Navigator {
+        Navigator::new(snapshot, Ok(BTreeSet::new()))
+    }
+
     fn triage_snapshot(entries: Vec<Entry>) -> Snapshot {
         let mut sample = snapshot(entries, true);
         sample.view.triage = true;
@@ -1124,7 +1153,7 @@ mod tests {
             sample.status_text = enabled;
             sample
         };
-        let mut navigator = Navigator::new(roster(false, ""));
+        let mut navigator = navigator(roster(false, ""));
         assert!(navigator.refresh(roster(true, "")));
         let empty = screen_at(&mut navigator, 40, 15);
         assert!(empty.contains("^S live on"));
@@ -1163,7 +1192,7 @@ mod tests {
         worker.description = "last note".into();
         let mut sample = snapshot(vec![entry("@1", true), worker], true);
         sample.status_text = true;
-        let mut navigator = Navigator::new(sample);
+        let mut navigator = navigator(sample);
         navigator.key(KeyCode::Down.into(), &server);
         for last_line in ["last note", "final-step"] {
             let first_page = screen_at(&mut navigator, 16, 9);
@@ -1187,7 +1216,7 @@ mod tests {
     #[test]
     fn grouped_browse_sorts_headings_keeps_member_order_and_counts_hidden_agents() {
         let server = Server::new("unused".into(), "unused".into(), "unused".into());
-        let mut navigator = Navigator::new(snapshot(
+        let mut navigator = navigator(snapshot(
             vec![
                 grouped_entry("@2", "Beta", false),
                 grouped_entry("@3", "", false),
@@ -1228,7 +1257,7 @@ mod tests {
     #[test]
     fn search_reaches_collapsed_groups_prefers_exact_numbers_and_restores_collapse() {
         let server = Server::new("unused".into(), "unused".into(), "unused".into());
-        let mut navigator = Navigator::new(snapshot(
+        let mut navigator = navigator(snapshot(
             vec![
                 grouped_entry("@2", "計測12", true),
                 grouped_entry("@12", "計測12", false),
@@ -1259,7 +1288,7 @@ mod tests {
     #[test]
     fn refresh_keeps_the_heading_and_follows_a_switched_to_collapsed_group() {
         let server = Server::new("unused".into(), "unused".into(), "unused".into());
-        let mut navigator = Navigator::new(snapshot(
+        let mut navigator = navigator(snapshot(
             vec![
                 grouped_entry("@1", "Alpha", true),
                 grouped_entry("@2", "Beta", false),
@@ -1295,7 +1324,7 @@ mod tests {
     #[test]
     fn arrows_wrap_at_each_end_of_the_current_projection() {
         let server = Server::new("unused".into(), "unused".into(), "unused".into());
-        let mut navigator = Navigator::new(snapshot(
+        let mut navigator = navigator(snapshot(
             vec![
                 grouped_entry("@1", "Lab", true),
                 grouped_entry("@2", "", false),
@@ -1319,7 +1348,7 @@ mod tests {
     #[test]
     fn picker_preserves_search_and_cancels_if_the_target_pane_is_replaced() {
         let server = Server::new("unused".into(), "unused".into(), "unused".into());
-        let mut navigator = Navigator::new(snapshot(vec![entry("@1", true)], true));
+        let mut navigator = navigator(snapshot(vec![entry("@1", true)], true));
         navigator.key(KeyCode::Char('S').into(), &server);
         navigator.picker = Some(GroupPicker::new(navigator.selection().unwrap(), Vec::new()));
         navigator.key(KeyCode::Char('Z').into(), &server);
@@ -1342,7 +1371,7 @@ mod tests {
         let server = Server::new("unused".into(), "unused".into(), "unused".into());
         let mut first = snapshot(vec![entry("@1", false)], true);
         first.active_window = "@8".into();
-        let mut navigator = Navigator::new(first);
+        let mut navigator = navigator(first);
         navigator.key(KeyCode::Char('S').into(), &server);
         navigator.picker = Some(GroupPicker::new(navigator.selection().unwrap(), Vec::new()));
         let mut second = snapshot(vec![entry("@1", false)], true);
@@ -1359,7 +1388,7 @@ mod tests {
 
         let mut worker = grouped_entry("@1", "Alpha", true);
         worker.activity = Activity::Working;
-        let mut navigator = Navigator::new(snapshot(vec![worker], true));
+        let mut navigator = navigator(snapshot(vec![worker], true));
         let mut terminal = Terminal::new(TestBackend::new(38, 12)).unwrap();
         let mut spinners = Spinners::default();
         terminal
@@ -1396,7 +1425,7 @@ mod tests {
             entries[8].index = "10".into();
             entries
         };
-        let mut navigator = Navigator::new(snapshot(entries(), true));
+        let mut navigator = navigator(snapshot(entries(), true));
         navigator.key(KeyCode::Left.into(), &server);
         navigator.key(toggle, &server);
         assert!(screen(&mut navigator).contains("TRIAGE 9 Shift+Tab work"));
@@ -1439,7 +1468,7 @@ mod tests {
         waiting.created = Some(Duration::from_secs(200));
         let mut idle = grouped_entry("@3", "", false);
         idle.created = Some(Duration::from_secs(300));
-        let mut navigator = Navigator::new(snapshot(vec![pinged, waiting, idle], true));
+        let mut navigator = navigator(snapshot(vec![pinged, waiting, idle], true));
         navigator.key(
             KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL),
             &server,
@@ -1468,7 +1497,7 @@ mod tests {
             elsewhere.priority = true;
             vec![old, requester, pending, elsewhere]
         };
-        let mut navigator = Navigator::new(triage_snapshot(entries(Activity::Idle, false, "")));
+        let mut navigator = navigator(triage_snapshot(entries(Activity::Idle, false, "")));
         for character in "lab".chars() {
             navigator.key(KeyCode::Char(character).into(), &server);
         }
@@ -1523,7 +1552,7 @@ mod tests {
             "alpha-line bravo-line charlie delta-line echo-line foxtrot golf-line".into();
         let mut second = entry("@2", false);
         second.description = "検査結果 second-row final-row".into();
-        let mut navigator = Navigator::new(snapshot(vec![first, second], true));
+        let mut navigator = navigator(snapshot(vec![first, second], true));
         let render = |navigator: &mut Navigator, height| {
             let mut terminal = Terminal::new(TestBackend::new(16, height)).unwrap();
             terminal
@@ -1562,7 +1591,7 @@ mod tests {
 
     #[test]
     fn literal_search_matches_window_fields_and_handles_one_or_zero_agents() {
-        let mut navigator = Navigator::new(snapshot(vec![entry("@1", true)], true));
+        let mut navigator = navigator(snapshot(vec![entry("@1", true)], true));
         for query in [
             "/WORK/OBS",
             "samples",
@@ -1588,7 +1617,7 @@ mod tests {
     fn a_single_interior_cell_displays_the_search_marker() {
         use ratatui::{backend::TestBackend, Terminal};
 
-        let mut navigator = Navigator::new(snapshot(vec![entry("@1", true)], false));
+        let mut navigator = navigator(snapshot(vec![entry("@1", true)], false));
         let mut terminal = Terminal::new(TestBackend::new(3, 3)).unwrap();
         terminal
             .draw(|frame| navigator.draw(frame, &mut Spinners::default()))
@@ -1603,7 +1632,7 @@ mod tests {
         let mut worker = entry("@1", true);
         worker.title = "Shared spectra 測定値 ".repeat(4);
         worker.activity = Activity::Working;
-        let mut navigator = Navigator::new(snapshot(vec![worker], true));
+        let mut navigator = navigator(snapshot(vec![worker], true));
         let mut terminal = Terminal::new(TestBackend::new(40, 9)).unwrap();
         let mut spinners = Spinners::default();
         terminal
@@ -1631,7 +1660,7 @@ mod tests {
         worker.priority = true;
         worker.bell = true;
         worker.title = "Working".into();
-        let mut navigator = Navigator::new(snapshot(vec![entry("@1", true), worker], false));
+        let mut navigator = navigator(snapshot(vec![entry("@1", true), worker], false));
         let render = |navigator: &mut Navigator, width, glyph: &str| {
             let mut terminal = Terminal::new(TestBackend::new(width, 4)).unwrap();
             let mut spinners = Spinners::default();
@@ -1665,7 +1694,7 @@ mod tests {
 
         let mut worker = entry("@1", true);
         worker.activity = Activity::Working;
-        let mut navigator = Navigator::new(snapshot(vec![worker], true));
+        let mut navigator = navigator(snapshot(vec![worker], true));
         navigator.filtering = true;
         navigator.query.push('S');
         navigator.filter();
@@ -1701,8 +1730,7 @@ mod tests {
 
     #[test]
     fn selection_survives_a_filtered_refresh_and_follows_an_external_switch() {
-        let mut navigator =
-            Navigator::new(snapshot(vec![entry("@1", true), entry("@2", false)], true));
+        let mut navigator = navigator(snapshot(vec![entry("@1", true), entry("@2", false)], true));
         navigator.query.push_str("[rna]");
         navigator.filter();
         navigator.move_by(1);

@@ -2,7 +2,9 @@ use crate::{
     groups::{GroupStore, UNGROUPED},
     identity::Session,
 };
-use std::{borrow::Cow, ffi::OsString, io, process::Command, time::Duration};
+use std::{
+    borrow::Cow, collections::BTreeSet, ffi::OsString, io, process::Command, time::Duration,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Activity {
@@ -74,6 +76,7 @@ pub(crate) enum ViewSetting {
 const TRIAGE_OPTION: &str = "@omp_dock_triage";
 const FOCUS_GROUP_OPTION: &str = "@omp_dock_focus_group";
 const ATTENTION_OPTION: &str = "@omp_dock_attention_only";
+const FOLDED_GROUPS_OPTION: &str = "@omp_dock_folded_groups";
 
 fn snapshot_preferences<'a>(
     records: &mut std::iter::Peekable<impl Iterator<Item = &'a str>>,
@@ -215,6 +218,26 @@ impl Server {
             &self.session,
             "@omp_dock_status_text",
             if enabled { "on" } else { "off" },
+        ])?;
+        Ok(())
+    }
+
+    pub(crate) fn folded_groups(&self) -> io::Result<BTreeSet<String>> {
+        let value = self.command(&["show-options", "-qvt", &self.session, FOLDED_GROUPS_OPTION])?;
+        if value.trim_end_matches('\n').is_empty() {
+            return Ok(BTreeSet::new());
+        }
+        Ok(serde_json::from_str(&value)?)
+    }
+
+    pub(crate) fn save_folded_groups(&self, groups: &BTreeSet<String>) -> io::Result<()> {
+        let value = serde_json::to_string(groups)?;
+        self.command(&[
+            "set-option",
+            "-t",
+            &self.session,
+            FOLDED_GROUPS_OPTION,
+            &value,
         ])?;
         Ok(())
     }

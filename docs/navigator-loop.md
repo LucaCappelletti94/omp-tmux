@@ -65,13 +65,13 @@ Help occupies the existing dock. It opens at the first shortcut and keeps the un
 
 ## Group navigation
 
-Each identified OMP session belongs to at most one named group. Unassigned agents appear under **Ungrouped**. With no grouped local agents, the dock shows the ordinary flat list. Otherwise it shows nonempty named headings alphabetically, then **Ungrouped** if needed. Members keep their `tmux` window numbers and order. A heading takes one row in either view. Its collapse state belongs to the open dock. The header count counts matching agents, regardless of collapse.
+Each identified OMP session belongs to at most one named group. Unassigned agents appear under **Ungrouped**. With no grouped local agents, the dock shows the ordinary flat list. Otherwise it shows nonempty named headings alphabetically, then **Ungrouped** if needed. Members keep their `tmux` window numbers and order. A heading takes one row in either view. The header counts matching agents, including those under folded headings.
 
 | Event or job | Browse with an empty query | Search results | Move to group |
 | --- | --- | --- | --- |
 | `↑` or `↓` | Cycle through visible headings and agents | Cycle through matching agents | Cycle through available destinations |
 | `←` or `→` | Collapse or expand the selected group. Collapsing a member selects its heading | Ignore | Ignore |
-| `Enter` | Toggle a heading or open the selected agent | Open the selected agent | Recheck the original window, pane and OMP ID. Write only the membership, expand its destination and keep the moved agent selected if visible |
+| `Enter` | Toggle a heading or open the selected agent | Open the selected agent | Recheck the original window, pane and OMP ID. Save membership, expand its destination and keep the moved agent selected if visible |
 | `Ctrl+g` | On an identified agent, open its destination list. A missing ID explains why the agent cannot be moved. Ignore a heading | Same | Ignore |
 | Printable text, `/`, `Backspace` | Use the search field | Search all members, including collapsed groups, in a flat list. A matching group name includes every local member | Edit the destination field. Offer matching saved names and creation of a valid new name |
 | `Esc` | Return to the work pane | Clear the query, retain collapse choices | Cancel the move without changing membership, query or focus |
@@ -84,6 +84,17 @@ Each identified OMP session belongs to at most one named group. Unassigned agent
 | Storage or validation failure | Keep navigation available and display the error | Same | Keep the picker open on a write failure. Never report an unconfirmed move |
 
 `↑` on the first item selects the last and `↓` on the last selects the first. An empty list has no selection. A one-item list keeps its selection.
+
+| Event or job | Grouped roster | Search, triage or focus filters | Dock closed |
+| --- | --- | --- | --- |
+| Open or reopen | Load the session’s folded names before choosing the initial row. If the active agent is hidden, select its heading | Load the same names without applying them to the flat list | Keep folds until the `tmux` session ends |
+| Click, `Enter`, `←` or `→` changes a fold | Save the changed set before drawing. Leave other groups alone. An unchanged fold does no write | Use the flat list’s bindings without changing folds | No action |
+| Confirm a move into a folded destination | Expand and save the destination, including **Ungrouped**. Keep other folds | Remember the same expansion for the return to grouped browsing | No action |
+| A group disappears or returns, membership changes elsewhere, or a window is renumbered | Retain folds by exact group name even when no local member is visible. A new name starts expanded | Keep folds while filtering | Restore by name on the next open |
+| Resize, focus, metadata tick, bell, spinner, help or cancelled move | Keep folds in memory without writing | Same | No action |
+| Fold write fails | Report the error and restore the saved folds when readable. Leave any confirmed membership move in place | Same | Reopen with the last saved folds |
+
+The session option `@omp_dock_folded_groups` holds a `JSON` array of exact group names. The empty name represents **Ungrouped**. A missing option starts all groups expanded. An unreadable option shows an error and leaves the roster usable.
 
 Membership lives under `$XDG_STATE_HOME/omp-tmux/groups`, with `~/.local/state/omp-tmux/groups` as the default. One file per OMP UUID lets different docks update unrelated sessions independently. Assignment replaces that UUID’s file atomically. Choosing **Ungrouped** removes it. No window or pane is moved, renamed or resized. A group is available while at least one saved membership uses its name, including sessions currently closed. The destination list reads those names when opened. Agent refreshes look up only the local roster. Group names are trimmed, case-sensitive text of up to 64 characters, excluding control characters and the reserved name **Ungrouped**.
 
@@ -102,7 +113,7 @@ The bell hook records each unread ping with a timestamp and a serial so repeated
 
 ## Remembered view and focus
 
-The `tmux` session owns three independent dock preferences. `Ctrl+t` chooses the ordering, `Ctrl+f` limits the list to one exact group, and `Ctrl+a` limits it to sessions requiring attention. Group focus includes **Ungrouped** as a choice. An unfocused dock means the work pane has the keyboard. This is independent of which sessions its filters display.
+The `tmux` session owns the group folds, ordering and both focus filters. `Ctrl+t` chooses the ordering, `Ctrl+f` limits the list to one exact group, and `Ctrl+a` limits it to sessions requiring attention. Group focus includes **Ungrouped** as a choice. An unfocused dock means the work pane has the keyboard. This is independent of which sessions its filters display.
 
 | Event or job | All sessions | Group focus | Attention focus | Both filters |
 | --- | --- | --- | --- | --- |
@@ -117,7 +128,7 @@ The `tmux` session owns three independent dock preferences. `Ctrl+t` chooses the
 | Group folding | Use existing headings when browsing | Flat list independent of folds | Flat list independent of folds | Flat list independent of folds |
 | Work focus, resize, live status, spinner or page key | Keep preferences | Same | Same | Same |
 | Group picker or help | Keep the roster current underneath. Ignore the three preference shortcuts in the modal | Same | Same | Same |
-| `Shift+Tab`, pair suspension or closing the renderer | Keep the confirmed preferences in this `tmux` session. Search, open modals and folds remain local to the renderer | Same | Same | Same |
+| `Shift+Tab`, pair suspension or closing the renderer | Keep confirmed folds, ordering and filters in this `tmux` session. Search and open modals remain local to the renderer | Same | Same | Same |
 | Preference write fails | Restore the saved view and show the error. Do not activate a work pane | Same | Same | Same |
 
 `@omp_dock_triage` and `@omp_dock_attention_only` are `on` or `off`. `@omp_dock_focus_group` holds the group name, `Ungrouped` for unassigned sessions, or an empty value for all groups. Each shortcut writes only its own session option. The metadata snapshot reads these options along with the roster. A focus change resets detail scrolling, keeps a highlighted session when it still qualifies and otherwise selects the first result. Entering triage starts at the highest-ranked result. Status updates retain the selected session when present and never steal work focus. An empty scope stays active and continues to watch the full roster.
