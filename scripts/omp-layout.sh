@@ -25,7 +25,7 @@ report() {
 	key="@omp_layout_message_$$"
 	sum=$(printf '%s' "$1" | cksum | cut -d ' ' -f 1)
 	tm set-option -t "$session" "$key" "$1" 2>/dev/null || return 0
-	tm if-shell -F -t "$session" "#{!=:#{@omp_layout_error},$sum}" \
+	tm if-shell -F -t "$session" "#{&&:#{==:#{@omp_layout_request},$request},#{!=:#{@omp_layout_error},$sum}}" \
 		"set-option -t '$session' @omp_layout_error $sum ; display-message -t '$session' '#{$key}'" 2>/dev/null || true
 	tm set-option -u -t "$session" "$key" 2>/dev/null || true
 }
@@ -80,7 +80,9 @@ publish() {
 # The worker gets two seconds, then its request is retired and it and its children are killed.
 refresh() {
 	request="$$.$(date +%s)"
-	tm set-option -t "$session" @omp_layout_request "$request" 2>/dev/null || return 0
+	registered=$(tm if-shell -F -t "$session" '#{&&:#{!=:#{@omp_bar},dock},#{==:#{@omp_dock_status},}}' \
+		"set-option -t '$session' @omp_layout_request $request ; display-message -p $request" 2>/dev/null) || return 0
+	[ "$registered" = "$request" ] || return 0
 	"$self" publish "$socket" "$session" "$request" &
 	worker=$!
 	(
@@ -88,9 +90,11 @@ refresh() {
 		# Once fired, the watchdog must outlive the cleanup below to show its message.
 		trap '' TERM
 		kill -0 "$worker" 2>/dev/null || exit 0
-		tm set-option -t "$session" @omp_layout_request "expired.$request" 2>/dev/null || true
+		tm if-shell -F -t "$session" "#{==:#{@omp_layout_request},$request}" \
+			"set-option -t '$session' @omp_layout_request expired.$request" 2>/dev/null || true
 		pkill -TERM -P "$worker" 2>/dev/null || true
 		kill -TERM "$worker" 2>/dev/null || true
+		request="expired.$request"
 		report 'omp-tmux: layout refresh exceeded 2 seconds and was stopped'
 	) 2>/dev/null &
 	watchdog=$!

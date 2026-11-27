@@ -34,7 +34,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install tmux and bats-core
         run: sh .github/ci-setup.sh
-      - name: Run the layout and status grid tests
+      - name: Test the session navigator
+        if: matrix.tmux == 'apt'
+        run: CARGO_TARGET_DIR="$PWD/target" cargo test --release --locked -p omp-dock
+      - name: Build the session navigator
+        run: CARGO_TARGET_DIR="$PWD/target" cargo build --locked --release -p omp-dock
+      - name: Run the terminal and layout tests
         run: bats tests/
       - name: Validate the remaining config options against a live server
         run: |
@@ -66,7 +71,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install tmux and bats-core
         run: sh .github/ci-setup.sh
-      - name: Run the layout and status grid tests
+      - name: Build the session navigator
+        run: CARGO_TARGET_DIR="$PWD/target" cargo build --locked --release -p omp-dock
+      - name: Run the terminal and layout tests
         run: bats tests/
       - name: Validate the remaining config options against a live server
         run: |
@@ -92,7 +99,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install tmux and bats-core
         run: sh .github/ci-setup.sh
-      - name: Run the layout and status grid tests
+      - name: Build the session navigator
+        run: CARGO_TARGET_DIR="$PWD/target" cargo build --locked --release -p omp-dock
+      - name: Run the terminal and layout tests
         run: bats tests/
       - name: Validate the remaining config options against a live server
         run: |
@@ -117,7 +126,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install tmux and bats-core
         run: sh .github/ci-setup.sh
-      - name: Run the layout and status grid tests
+      - name: Build the session navigator
+        run: |
+          apk add -q cargo build-base
+          CARGO_TARGET_DIR="$PWD/target" cargo build --locked --release -p omp-dock
+      - name: Run the terminal and layout tests
         run: bats tests/
   awk:
     name: layout under ${{ matrix.awk }}

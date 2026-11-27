@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/LucaCappelletti94/omp-tmux/actions/workflows/ci.yml/badge.svg)](https://github.com/LucaCappelletti94/omp-tmux/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Live tmux status grid for [Oh My Pi](https://github.com/can1357/oh-my-pi) agents.
+A live status grid and optional [keyboard navigator](docs/shortcuts.md) for [Oh My Pi](https://github.com/can1357/oh-my-pi) agents running in `tmux`.
 
 Oh My Pi keeps each pane title updated as `π <sep> <label>`, with `>` idle, `!` waiting for input and a braille spinner while working. Every window becomes a fixed-width cell showing that state, waiting as soon as any of its panes waits, a purple `^` for manual priority, a green `+` for a bell you have not seen yet, its index and its live label. Titles travel through the pty, so no agent can ever relabel another's window.
 
@@ -16,8 +16,20 @@ Source it from `~/.tmux.conf`, or install it with [TPM](https://github.com/tmux-
 source-file ~/github/omp-tmux/omp-tmux.conf
 ```
 
-Keep the Oh My Pi settings `completion.notify`, `ask.notify`, and `tui.titleState` at their defaults. `prefix A` opens a menu that marks priority (`h` set, `c` clear), opens pickers showing each window's signals and full label (`u` urgent, `w` waiting, `d` unseen bell, `p` priority, `x` done), searches windows by label or working directory (`/`, from tmux 3.3), hides or shows the bar (`s`) and lays it out again (`r`).
+Keep the Oh My Pi settings `completion.notify`, `ask.notify`, and `tui.titleState` at their defaults. The status grid works without Rust.
 
-`@omp_max_rows` (`5`), `@omp_label_width` (`20`), `@omp_key` (`A`) and the styles `@omp_style_waiting`, `@omp_style_bell`, `@omp_style_priority`, `@omp_style_working`, `@omp_style_muted`, `@omp_style_urgent`, `@omp_style_sleeping`, `@omp_style_done`, `@omp_style_crashed` and `@omp_style_current` take effect when set before sourcing. omp-tmux owns the whole status bar, so `status-left` and `status-right` do not show. It leaves the mouse alone, best kept off for native selection and link clicking.
+## Open the session navigator
+
+From the plugin directory, build `omp-dock` with Rust 1.88 or newer. If you use a custom `CARGO_TARGET_DIR`, put the resulting `omp-dock` on `PATH`.
+
+```sh
+cargo build --release --locked
+```
+
+Click a session in the dock to open its live prompt, or press `Shift+Tab`, type part of its title and press `Enter`. `Shift+Tab` moves the keyboard between dock and work. `Alt+z` toggles fullscreen for the current work pane. Press `?` in the dock for shortcuts, or `F1` while typing. The [shortcut guide](docs/shortcuts.md) covers mouse settings, grouping, triage and paired prompts.
+
+While the dock is open, it reserves a 40-column strip in suitable windows of this session. Switching between them keeps the work panes at the same size. The dock needs an unzoomed, unshared window at least 76 columns wide. Hiding it returns those columns to work. To keep OMP from replaying the transcript when its width changes, run `omp config set tui.resizeScrollback preserve`. This [OMP profile setting](https://github.com/can1357/oh-my-pi/blob/v19.1.1/docs/settings.md#live-file-changes) keeps older lines in scrollback at their existing wrapping and redraws the current prompt at the new width.
+
+`@omp_max_rows` (`5`), `@omp_label_width` (`20`), `@omp_key` (`A`) and the styles `@omp_style_waiting`, `@omp_style_bell`, `@omp_style_priority`, `@omp_style_working`, `@omp_style_muted`, `@omp_style_urgent`, `@omp_style_sleeping`, `@omp_style_done`, `@omp_style_crashed` and `@omp_style_current` take effect when set before sourcing. omp-tmux owns the whole status bar, so `status-left` and `status-right` do not show. It leaves your `tmux` mouse settings unchanged.
 
 The layout helper in `scripts/` needs `sh`, `awk` and `pkill`. CI runs the tests on tmux 3.2a through 3.8 on Linux, on Alpine with BusyBox, and on Homebrew's tmux on macOS.

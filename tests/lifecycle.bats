@@ -244,8 +244,7 @@ settled() { eventually no_process "omp-layout.sh refresh.* .*$inner_socket"; }
 	[ -z "$output" ]
 }
 
-# omp_hooks_once [OTHERS] succeeds when each omp-tmux hook is set once at index 100 and, counting
-# OTHERS extra client-resized entries, nothing else is set on it.
+# OTHERS counts the extra client-resized and client-session-changed hooks supplied by the caller.
 omp_hooks_once() {
 	hooks=$(inner show-hooks -g)
 	hooks_expected='client-attached client-detached client-resized client-session-changed window-linked window-unlinked'
@@ -257,7 +256,9 @@ omp_hooks_once() {
 	esac
 	for hook in $hooks_expected; do
 		[ "$(echo "$hooks" | grep "^$hook\[100\]" | grep -cE '@omp_(layout|refresh)')" -eq 1 ] || return 1
-		[ "$(echo "$hooks" | grep -c "^$hook\[")" -eq "$([ "$hook" = client-resized ] && echo $((1 + ${1:-0})) || echo 1)" ] || return 1
+		local others=0
+		case $hook in client-resized | client-session-changed) others=${1:-0} ;; esac
+		[ "$(echo "$hooks" | grep -c "^$hook\[")" -eq "$((1 + others))" ] || return 1
 	done
 }
 
@@ -269,10 +270,12 @@ omp_hooks_once() {
 @test "reloading the configuration keeps one copy of each hook and leaves other hooks alone" {
 	start_session 0 1 2 3 4
 	inner set-hook -g 'client-resized[5]' 'display-message mine'
+	inner set-hook -g 'client-session-changed[101]' 'display-message keep-session-hook'
 	inner source-file "$root/omp-tmux.conf"
 	inner source-file "$root/omp-tmux.conf"
 	omp_hooks_once 1
 	inner show-hooks -g | grep -qF 'client-resized[5] display-message mine'
+	inner show-hooks -g client-session-changed | grep -qF 'client-session-changed[101] display-message keep-session-hook'
 }
 
 @test "a persistent failure is reported once while the stale guard retries" {
