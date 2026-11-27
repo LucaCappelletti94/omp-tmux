@@ -2,15 +2,6 @@
 
 load helpers
 
-# SGR mouse reports use one-based screen coordinates. The dock is at the top left.
-left_click() {
-	outer send-keys -l -t a "$(printf '\033[<0;%d;%dM\033[<0;%d;%dm' "$1" "$2" "$1" "$2")"
-}
-
-dock_line() {
-	inner capture-pane -p -t "$dock" | awk -v text="$1" 'index($0, text) {print NR; exit}'
-}
-
 @test "one click on a wrapped description opens its live prompt directly from work" {
 	start_session 0 3
 	inner set -t proof mouse on
@@ -27,11 +18,11 @@ dock_line() {
 	eventually shows a 'Shift+Tab work'
 	eventually shows a 'second line marker'
 	dock=$(inner display-message -p -t proof '#{pane_id}')
-	line=$(dock_line 'second line marker')
-	[ "$line" -gt "$(dock_line 'Long measurement')" ]
+	line=$(dock_line "$dock" 'second line marker')
+	[ "$line" -gt "$(dock_line "$dock" 'Long measurement')" ]
 	outer send-keys -t a Escape
 	eventually is "$work" inner display-message -p -t proof '#{pane_id}'
-	left_click 12 "$line"
+	left_click a 12 "$line"
 	eventually is "$target" inner display-message -p -t proof '#{pane_id}'
 	eventually shows a 'TARGET PROMPT>'
 	is 0 inner display-message -p -t "$target" '#{pane_in_mode}'
@@ -53,20 +44,20 @@ dock_line() {
 	outer send-keys -t a Tab
 	outer send-keys -l -t a 'matching'
 	eventually hides a 'CONTROL'
-	line=$(dock_line SECOND)
+	line=$(dock_line "$dock" SECOND)
 	[ -n "$line" ]
 	outer send-keys -t a F1
 	eventually shows a 'Keyboard shortcuts'
-	left_click 9 "$line"
+	left_click a 9 "$line"
 	outer send-keys -t a F1
 	eventually shows a 'SECOND'
-	left_click 1 "$line"
+	left_click a 1 "$line"
 	outer send-keys -t a F1
 	eventually shows a 'Keyboard shortcuts'
 	is "$dock" inner display-message -p -t proof '#{pane_id}'
 	outer send-keys -t a F1
 	eventually shows a 'SECOND'
-	left_click 9 "$line"
+	left_click a 9 "$line"
 	eventually is "$target" inner display-message -p -t proof '#{pane_id}'
 	is off inner show-options -gv mouse
 }

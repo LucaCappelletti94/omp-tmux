@@ -180,6 +180,15 @@ growth() {
 shows() { outer capture-pane -p -t "$1" | grep -qF -- "$2"; }
 hides() { ! shows "$@"; }
 
+# SGR mouse reports use one-based screen coordinates. The dock is at the top left.
+left_click() {
+	outer send-keys -l -t "$1" "$(printf '\033[<0;%d;%dM\033[<0;%d;%dm' "$2" "$3" "$2" "$3")"
+}
+
+dock_line() {
+	inner capture-pane -p -t "$1" | awk -v text="$2" 'index($0, text) {print NR; exit}'
+}
+
 # menu CLIENT [KEY] opens the agent menu with prefix KEY, A by default.
 menu() {
 	outer send-keys -t "$1" C-b "${2:-A}"

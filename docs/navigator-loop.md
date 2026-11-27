@@ -25,9 +25,10 @@ The dock requests button reports from its own terminal. The plugin leaves the `t
 | Event or job | Roster, including search, focus filters and triage | Group picker or help | Work pane, dock hidden or fullscreen |
 | --- | --- | --- | --- |
 | Plain left press on an agent title, visible description or live message | Open the agent drawn there using the same validated work pane as `Enter`. Leave its prompt focused and the dock open | Ignore the press. No activation through the overlay | A visible dock handles a press delivered to it. Other panes retain their mouse behavior |
-| Press on a heading, field, frame, footer, empty space or an error | Ignore | Ignore | Same |
+| Plain left press anywhere on a visible group heading | Select the heading and toggle its members as `Enter` does. Keep the keyboard in the dock and the current work window unchanged | Ignore | A visible dock handles a press delivered to it |
+| Press on a field, frame, footer, empty space or an error | Ignore | Ignore | Same |
 | Release, drag, motion, wheel, modified press or another button | Ignore | Ignore | Same |
-| First draw, resize, query, fold, modal, viewport, bell or metadata change | Every full draw replaces clickable areas with the visible agent rectangles for that frame. A missing target cannot fall through to another agent | Clear the roster targets | Keep ordinary input outside the dock |
+| First draw, resize, query, fold, modal, viewport, bell or metadata change | Every full draw replaces clickable areas with the visible roster rows for that frame. Folded members have no target | Clear the roster targets | Keep ordinary input outside the dock |
 | Spinner deadline or unchanged snapshot | Keep the clickable areas for the displayed frame | No roster targets | No change |
 | `Shift+Tab` | Return to the current work pane at its prompt without opening the highlighted agent | Return to work, retaining the modal | Open or focus the dock. Leave the paired view at its focused source. Pass the key through outside an OMP session |
 | `Alt+z` | Zoom the last work pane in this window and give it the keyboard | Zoom the work pane, keeping the modal | Toggle the current work pane’s zoom. Restore the prior split and retain work focus on exit. A paired view zooms its focused side. Pass the key through outside OMP |

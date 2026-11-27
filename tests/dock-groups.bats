@@ -78,6 +78,47 @@ move_agent() {
 	eventually is 3 inner display-message -p -t proof '#{window_index}'
 }
 
+@test "clicking group headings folds and unfolds only their members and keeps the dock focused" {
+	group_session 3 18
+	inner set -t proof mouse on
+	title 3 'π > HOME: Baseline controls'
+	title 18 'π > MEMBER: Fraction polarity'
+	agent_identity proof:18 '11111111-1111-4111-8111-111111111118'
+	work=$(inner display-message -p -t proof:3 '#{pane_id}')
+	member=$(inner display-message -p -t proof:18 '#{pane_id}')
+	inner select-window -t "$work"
+	attach a 110 28
+	outer send-keys -t a BTab
+	await_label 'Shift+Tab work'
+	dock=$(inner display-message -p -t proof '#{pane_id}')
+	outer send-keys -l -t a '18'
+	await_label '/ 18'
+	move_agent Spectra
+	outer send-keys -t a Escape
+	await_label '▾ Spectra'
+	outer send-keys -t a BTab
+	eventually is "$work" inner display-message -p -t proof '#{pane_id}'
+
+	left_click a 36 "$(dock_line "$dock" '▾ Spectra')"
+	await_label '›▸ Spectra'
+	hides a 'Fraction polarity'
+	shows a 'Baseline controls'
+	is "$dock" inner display-message -p -t proof '#{pane_id}'
+	is 3 inner display-message -p -t proof '#{window_index}'
+
+	left_click a 8 "$(dock_line "$dock" '▾ Ungrouped')"
+	await_label '›▸ Ungrouped'
+	hides a 'Baseline controls'
+	left_click a 3 "$(dock_line "$dock" '▸ Spectra')"
+	await_label '›▾ Spectra'
+	shows a 'Fraction polarity'
+	hides a 'Baseline controls'
+	is "$dock" inner display-message -p -t proof '#{pane_id}'
+
+	left_click a 10 "$(dock_line "$dock" 'Fraction polarity')"
+	eventually is "$member" inner display-message -p -t proof '#{pane_id}'
+}
+
 @test "group membership follows a resumed OMP ID and supports moving, cancelling and ungrouping" {
 	group_session 3 18
 	title 3 'π > CONTROL: Calibration'

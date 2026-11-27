@@ -11,8 +11,7 @@ const SECTIONS: &[(&str, &[&str])] = &[
         &[
             "Type or /   Search by keyword or ID",
             "↑ / ↓       Previous / next, wrapping",
-            "Enter       Open agent or toggle group",
-            "Left click  Open agent at its prompt",
+            "Click/Enter Open agent or toggle group",
             "Backspace   Erase a search character",
             "Esc         Clear search or focus work",
             "Tab         Full / compact view",

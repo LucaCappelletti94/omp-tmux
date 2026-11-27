@@ -10,7 +10,7 @@ Press `?` in the dock to open the shortcut menu. `F1` also opens it while typing
 
 | Key | What it does |
 | --- | --- |
-| Left click | Open the session under the pointer and give its prompt the keyboard. |
+| Left click | Click anywhere on a group heading to collapse or expand it and keep the keyboard in the dock. Click a session to jump to its prompt. |
 | `Shift+Tab` | Switch between the dock and the current work pane without resizing them or clearing the search. From fullscreen, restore the split and focus the dock. From a hidden dock, open it. |
 | `Alt+z` | Give the current work pane the whole window, even if the dock has focus. Press again to restore the split and keep typing in the same pane. |
 | Type, or press `/` and type | Search titles, descriptions, group names, directories, window numbers and OMP session IDs. Notification tags and badge codes also match when available. An exact window number takes priority. |

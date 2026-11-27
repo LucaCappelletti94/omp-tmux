@@ -974,9 +974,7 @@ impl Navigator {
             });
             let height = u16::try_from(range.len() + 1).expect("row fits the remaining viewport");
             let mut row = take_rows(&mut body, height);
-            if matches!(item, Row::Agent(_)) {
-                self.clickable.push((row, position));
-            }
+            self.clickable.push((row, position));
             let style = if is_selected {
                 Style::default().fg(Color::White).bg(Color::Indexed(24))
             } else {
